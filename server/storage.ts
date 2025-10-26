@@ -1,22 +1,16 @@
-import {
-  users,
-  browserSessions,
-  cookies,
-  type User,
-  type UpsertUser,
-  type BrowserSession,
-  type InsertBrowserSession,
-  type Cookie,
-  type InsertCookie,
+import type {
+  User,
+  BrowserSession,
+  InsertBrowserSession,
+  Cookie,
+  InsertCookie,
 } from "@shared/schema";
-import { db } from "./db";
-import { eq, and } from "drizzle-orm";
+import { randomUUID } from "crypto";
 
 // Interface for storage operations
 export interface IStorage {
-  // User operations (IMPORTANT: mandatory for Replit Auth)
+  // User operations
   getUser(id: string): Promise<User | undefined>;
-  upsertUser(user: UpsertUser): Promise<User>;
   
   // Browser session operations
   getBrowserSession(id: string): Promise<BrowserSession | undefined>;
@@ -31,50 +25,53 @@ export interface IStorage {
   clearSessionCookies(sessionId: string): Promise<void>;
 }
 
-export class DatabaseStorage implements IStorage {
-  // User operations (IMPORTANT: mandatory for Replit Auth)
-  async getUser(id: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
-    return user;
+// In-memory storage implementation
+export class MemStorage implements IStorage {
+  private users: Map<string, User> = new Map();
+  private browserSessions: Map<string, BrowserSession> = new Map();
+  private cookies: Map<string, Cookie> = new Map();
+
+  constructor() {
+    // Initialize admin user
+    this.users.set("admin", {
+      id: "admin",
+      username: process.env.ADMIN_USERNAME || "admin",
+    });
   }
 
-  async upsertUser(userData: UpsertUser): Promise<User> {
-    const [user] = await db
-      .insert(users)
-      .values(userData)
-      .onConflictDoUpdate({
-        target: users.id,
-        set: {
-          ...userData,
-          updatedAt: new Date(),
-        },
-      })
-      .returning();
-    return user;
+  // User operations
+  async getUser(id: string): Promise<User | undefined> {
+    return this.users.get(id);
   }
 
   // Browser session operations
   async getBrowserSession(id: string): Promise<BrowserSession | undefined> {
-    const [session] = await db
-      .select()
-      .from(browserSessions)
-      .where(eq(browserSessions.id, id));
-    return session;
+    return this.browserSessions.get(id);
   }
 
   async getBrowserSessionsByUserId(userId: string): Promise<BrowserSession[]> {
-    return await db
-      .select()
-      .from(browserSessions)
-      .where(eq(browserSessions.userId, userId))
-      .orderBy(browserSessions.createdAt);
+    return Array.from(this.browserSessions.values())
+      .filter(session => session.userId === userId)
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
   }
 
   async createBrowserSession(sessionData: InsertBrowserSession): Promise<BrowserSession> {
-    const [session] = await db
-      .insert(browserSessions)
-      .values(sessionData)
-      .returning();
+    const id = randomUUID();
+    const now = new Date();
+    const session: BrowserSession = {
+      id,
+      userId: sessionData.userId,
+      url: sessionData.url,
+      status: sessionData.status || "stopped",
+      userAgent: sessionData.userAgent,
+      viewportWidth: sessionData.viewportWidth || 1920,
+      viewportHeight: sessionData.viewportHeight || 1080,
+      sessionData: sessionData.sessionData,
+      lastActivityAt: now,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.browserSessions.set(id, session);
     return session;
   }
 
@@ -82,41 +79,67 @@ export class DatabaseStorage implements IStorage {
     id: string,
     updates: Partial<InsertBrowserSession>
   ): Promise<BrowserSession> {
-    const [session] = await db
-      .update(browserSessions)
-      .set({
-        ...updates,
-        updatedAt: new Date(),
-      })
-      .where(eq(browserSessions.id, id))
-      .returning();
-    return session;
+    const session = this.browserSessions.get(id);
+    if (!session) {
+      throw new Error("Session not found");
+    }
+    
+    const updatedSession: BrowserSession = {
+      ...session,
+      ...updates,
+      updatedAt: new Date(),
+    };
+    
+    this.browserSessions.set(id, updatedSession);
+    return updatedSession;
   }
 
   async deleteBrowserSession(id: string): Promise<void> {
-    await db.delete(browserSessions).where(eq(browserSessions.id, id));
+    this.browserSessions.delete(id);
+    // Also delete associated cookies
+    const entries = Array.from(this.cookies.entries());
+    for (const [cookieId, cookie] of entries) {
+      if (cookie.sessionId === id) {
+        this.cookies.delete(cookieId);
+      }
+    }
   }
 
   // Cookie operations
   async getSessionCookies(sessionId: string): Promise<Cookie[]> {
-    return await db
-      .select()
-      .from(cookies)
-      .where(eq(cookies.sessionId, sessionId))
-      .orderBy(cookies.createdAt);
+    const allCookies = Array.from(this.cookies.values());
+    return allCookies.filter(cookie => cookie.sessionId === sessionId);
   }
 
   async createCookie(cookieData: InsertCookie): Promise<Cookie> {
-    const [cookie] = await db
-      .insert(cookies)
-      .values(cookieData)
-      .returning();
+    const id = randomUUID();
+    const now = new Date();
+    const cookie: Cookie = {
+      id,
+      sessionId: cookieData.sessionId,
+      name: cookieData.name,
+      value: cookieData.value,
+      domain: cookieData.domain || null,
+      path: cookieData.path || null,
+      expires: cookieData.expires || null,
+      httpOnly: cookieData.httpOnly || false,
+      secure: cookieData.secure || false,
+      sameSite: cookieData.sameSite || null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.cookies.set(id, cookie);
     return cookie;
   }
 
   async clearSessionCookies(sessionId: string): Promise<void> {
-    await db.delete(cookies).where(eq(cookies.sessionId, sessionId));
+    const entries = Array.from(this.cookies.entries());
+    for (const [cookieId, cookie] of entries) {
+      if (cookie.sessionId === sessionId) {
+        this.cookies.delete(cookieId);
+      }
+    }
   }
 }
 
-export const storage = new DatabaseStorage();
+export const storage = new MemStorage();

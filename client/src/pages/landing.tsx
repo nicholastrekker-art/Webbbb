@@ -1,8 +1,55 @@
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Globe, Lock, Clock, Database } from "lucide-react";
+import { useState } from "react";
+import { useLocation } from "wouter";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Landing() {
+  const [, setLocation] = useLocation();
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const { toast } = useToast();
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+
+    try {
+      const response = await fetch("/api/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ username, password }),
+      });
+
+      if (response.ok) {
+        queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+        setLocation("/");
+      } else {
+        const error = await response.json();
+        toast({
+          title: "Login Failed",
+          description: error.message || "Invalid credentials",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "An error occurred during login",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <header className="border-b">
@@ -11,16 +58,13 @@ export default function Landing() {
             <Globe className="w-8 h-8 text-primary" />
             <h1 className="text-2xl font-semibold">Browser Automation</h1>
           </div>
-          <Button asChild data-testid="button-login">
-            <a href="/api/login">Sign In</a>
-          </Button>
         </div>
       </header>
 
       <main className="flex-1 flex flex-col">
         <section className="flex-1 flex items-center justify-center px-4 py-12">
-          <div className="max-w-4xl mx-auto text-center space-y-8">
-            <div className="space-y-4">
+          <div className="max-w-4xl mx-auto w-full space-y-8">
+            <div className="space-y-4 text-center">
               <h2 className="text-5xl font-semibold tracking-tight">
                 Persistent Browser Automation
               </h2>
@@ -30,10 +74,46 @@ export default function Landing() {
               </p>
             </div>
 
-            <div className="flex items-center justify-center gap-4 flex-wrap">
-              <Button size="lg" className="h-12 px-8" asChild data-testid="button-get-started">
-                <a href="/api/login">Get Started</a>
-              </Button>
+            <div className="flex items-center justify-center">
+              <Card className="w-full max-w-md">
+                <CardHeader>
+                  <CardTitle>Admin Login</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <form onSubmit={handleLogin} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="username">Username</Label>
+                      <Input
+                        id="username"
+                        type="text"
+                        value={username}
+                        onChange={(e) => setUsername(e.target.value)}
+                        required
+                        data-testid="input-username"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="password">Password</Label>
+                      <Input
+                        id="password"
+                        type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        required
+                        data-testid="input-password"
+                      />
+                    </div>
+                    <Button
+                      type="submit"
+                      className="w-full"
+                      disabled={isLoading}
+                      data-testid="button-login"
+                    >
+                      {isLoading ? "Logging in..." : "Sign In"}
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-12">
@@ -54,9 +134,9 @@ export default function Landing() {
                   <div className="w-12 h-12 rounded-md bg-primary/10 flex items-center justify-center mx-auto">
                     <Database className="w-6 h-6 text-primary" />
                   </div>
-                  <h3 className="font-semibold">Saved Data</h3>
+                  <h3 className="font-semibold">Local Storage</h3>
                   <p className="text-sm text-muted-foreground">
-                    Cookies and user data are automatically saved and restored
+                    Data and cookies stored locally in memory for fast access
                   </p>
                 </CardContent>
               </Card>
@@ -68,7 +148,7 @@ export default function Landing() {
                   </div>
                   <h3 className="font-semibold">Secure</h3>
                   <p className="text-sm text-muted-foreground">
-                    Protected with admin authentication and encrypted storage
+                    Protected with admin authentication and secure sessions
                   </p>
                 </CardContent>
               </Card>

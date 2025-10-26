@@ -1,6 +1,7 @@
-import puppeteer, { Browser, Page } from "puppeteer-extra";
+import puppeteer from "puppeteer-extra";
+import type { Browser, Page } from "puppeteer";
+import type { Protocol } from "puppeteer";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
-import type { Cookie as PuppeteerCookie } from "puppeteer";
 import { storage } from "./storage";
 import type { BrowserSession } from "@shared/schema";
 import { execSync } from "child_process";
@@ -71,10 +72,10 @@ export class BrowserSessionManager {
         await page.setUserAgent(session.userAgent);
       }
 
-      // Load cookies from database
+      // Load cookies from storage
       const cookies = await storage.getSessionCookies(sessionId);
       if (cookies.length > 0) {
-        const puppeteerCookies: PuppeteerCookie[] = cookies.map((cookie) => ({
+        const puppeteerCookies = cookies.map((cookie) => ({
           name: cookie.name,
           value: cookie.value,
           domain: cookie.domain || undefined,
@@ -90,7 +91,7 @@ export class BrowserSessionManager {
       // Navigate to URL
       await page.goto(session.url, { waitUntil: "networkidle0", timeout: 30000 });
 
-      // Save cookies back to database
+      // Save cookies back to storage
       await this.saveCookies(sessionId, page);
 
       // Store browser and page instance
@@ -99,7 +100,6 @@ export class BrowserSessionManager {
       // Update session status
       await storage.updateBrowserSession(sessionId, {
         status: "running",
-        lastActivityAt: new Date(),
       });
 
       // Set up periodic cookie saving
@@ -110,7 +110,6 @@ export class BrowserSessionManager {
       console.error(`Failed to start session ${sessionId}:`, error);
       await storage.updateBrowserSession(sessionId, {
         status: "error",
-        lastActivityAt: new Date(),
       });
       throw error;
     }
@@ -131,7 +130,6 @@ export class BrowserSessionManager {
     // Update session status
     await storage.updateBrowserSession(sessionId, {
       status: "paused",
-      lastActivityAt: new Date(),
     });
 
     console.log(`Session ${sessionId} paused`);
@@ -146,7 +144,6 @@ export class BrowserSessionManager {
       // Just update status if not running
       await storage.updateBrowserSession(sessionId, {
         status: "stopped",
-        lastActivityAt: new Date(),
       });
       return;
     }
@@ -163,7 +160,6 @@ export class BrowserSessionManager {
     // Update session status
     await storage.updateBrowserSession(sessionId, {
       status: "stopped",
-      lastActivityAt: new Date(),
     });
 
     console.log(`Session ${sessionId} stopped`);
@@ -178,7 +174,6 @@ export class BrowserSessionManager {
       // Already running, just update status
       await storage.updateBrowserSession(sessionId, {
         status: "running",
-        lastActivityAt: new Date(),
       });
       return;
     }
@@ -201,7 +196,6 @@ export class BrowserSessionManager {
     // Update session URL and save cookies
     await storage.updateBrowserSession(sessionId, {
       url,
-      lastActivityAt: new Date(),
     });
     await this.saveCookies(sessionId, instance.page);
   }
@@ -273,7 +267,7 @@ export class BrowserSessionManager {
   }
 
   /**
-   * Save cookies from page to database
+   * Save cookies from page to storage
    */
   private async saveCookies(sessionId: string, page: Page): Promise<void> {
     try {
@@ -342,7 +336,8 @@ export class BrowserSessionManager {
    * Clean up all sessions
    */
   async cleanup(): Promise<void> {
-    for (const [sessionId, instance] of activeBrowsers.entries()) {
+    const entries = Array.from(activeBrowsers.entries());
+    for (const [sessionId, instance] of entries) {
       try {
         await this.saveCookies(sessionId, instance.page);
         await instance.browser.close();
@@ -362,16 +357,9 @@ export const browserManager = new BrowserSessionManager();
 export async function restoreRunningSessions(): Promise<void> {
   console.log("Restoring running browser sessions...");
   try {
-    // This will be called from server/index.ts after storage is initialized
-    const { db } = await import("./db");
-    const { browserSessions } = await import("@shared/schema");
-    const { eq } = await import("drizzle-orm");
-
-    // Find all sessions that were running before restart
-    const runningSessions = await db
-      .select()
-      .from(browserSessions)
-      .where(eq(browserSessions.status, "running"));
+    // Get all sessions from storage
+    const allSessions = await storage.getBrowserSessionsByUserId("admin");
+    const runningSessions = allSessions.filter(s => s.status === "running");
 
     console.log(`Found ${runningSessions.length} sessions to restore`);
 
