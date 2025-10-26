@@ -1,16 +1,22 @@
 import puppeteer from "puppeteer-extra";
-import type { Browser, Page } from "puppeteer";
+import type { Browser, Page, CDPSession } from "puppeteer";
 import type { Protocol } from "puppeteer";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
 import { storage } from "./storage";
 import type { BrowserSession } from "@shared/schema";
 import { execSync } from "child_process";
+import type { WebSocket } from "ws";
 
 // Use stealth plugin to avoid detection
 puppeteer.use(StealthPlugin());
 
 // Store active browser instances and pages
-const activeBrowsers = new Map<string, { browser: Browser; page: Page }>();
+const activeBrowsers = new Map<string, { 
+  browser: Browser; 
+  page: Page; 
+  cdpSession?: CDPSession;
+  streamClients: Set<WebSocket>;
+}>();
 
 export class BrowserSessionManager {
   /**
@@ -100,7 +106,7 @@ export class BrowserSessionManager {
       await this.saveCookies(sessionId, page);
 
       // Store browser and page instance
-      activeBrowsers.set(sessionId, { browser, page });
+      activeBrowsers.set(sessionId, { browser, page, streamClients: new Set() });
 
       // Update session status
       await storage.updateBrowserSession(sessionId, {
@@ -202,6 +208,45 @@ export class BrowserSessionManager {
     await storage.updateBrowserSession(sessionId, {
       url,
     });
+    await this.saveCookies(sessionId, instance.page);
+  }
+
+  /**
+   * Go back in browser history
+   */
+  async goBack(sessionId: string): Promise<void> {
+    const instance = activeBrowsers.get(sessionId);
+    if (!instance) {
+      throw new Error("Session not running");
+    }
+
+    await instance.page.goBack({ waitUntil: "domcontentloaded", timeout: 30000 });
+    await this.saveCookies(sessionId, instance.page);
+  }
+
+  /**
+   * Go forward in browser history
+   */
+  async goForward(sessionId: string): Promise<void> {
+    const instance = activeBrowsers.get(sessionId);
+    if (!instance) {
+      throw new Error("Session not running");
+    }
+
+    await instance.page.goForward({ waitUntil: "domcontentloaded", timeout: 30000 });
+    await this.saveCookies(sessionId, instance.page);
+  }
+
+  /**
+   * Reload current page
+   */
+  async refresh(sessionId: string): Promise<void> {
+    const instance = activeBrowsers.get(sessionId);
+    if (!instance) {
+      throw new Error("Session not running");
+    }
+
+    await instance.page.reload({ waitUntil: "domcontentloaded", timeout: 30000 });
     await this.saveCookies(sessionId, instance.page);
   }
 
@@ -431,6 +476,126 @@ export class BrowserSessionManager {
       }
     }
     activeBrowsers.clear();
+  }
+
+  /**
+   * Start screencast for a session
+   */
+  async startScreencast(sessionId: string, ws: WebSocket): Promise<void> {
+    const instance = activeBrowsers.get(sessionId);
+    if (!instance) {
+      throw new Error("Session not running");
+    }
+
+    instance.streamClients.add(ws);
+
+    if (!instance.cdpSession) {
+      const cdpSession = await instance.page.createCDPSession();
+      instance.cdpSession = cdpSession;
+
+      cdpSession.on('Page.screencastFrame', async (params: any) => {
+        try {
+          await cdpSession.send('Page.screencastFrameAck', { 
+            sessionId: params.sessionId 
+          });
+
+          const frameData = {
+            type: 'frame',
+            data: params.data,
+            metadata: params.metadata,
+          };
+
+          instance.streamClients.forEach((client) => {
+            if (client.readyState === 1) {
+              client.send(JSON.stringify(frameData));
+            }
+          });
+        } catch (error) {
+          console.error('Error handling screencast frame:', error);
+        }
+      });
+
+      await cdpSession.send('Page.startScreencast', {
+        format: 'jpeg',
+        quality: 80,
+        maxWidth: instance.page.viewport()?.width || 1920,
+        maxHeight: instance.page.viewport()?.height || 1080,
+        everyNthFrame: 1,
+      });
+
+      console.log(`Started screencast for session ${sessionId}`);
+    }
+  }
+
+  /**
+   * Stop screencast for a session
+   */
+  async stopScreencast(sessionId: string, ws: WebSocket): Promise<void> {
+    const instance = activeBrowsers.get(sessionId);
+    if (!instance) return;
+
+    instance.streamClients.delete(ws);
+
+    if (instance.streamClients.size === 0 && instance.cdpSession) {
+      try {
+        await instance.cdpSession.send('Page.stopScreencast');
+        await instance.cdpSession.detach();
+        instance.cdpSession = undefined;
+        console.log(`Stopped screencast for session ${sessionId}`);
+      } catch (error) {
+        console.error('Error stopping screencast:', error);
+      }
+    }
+  }
+
+  /**
+   * Dispatch mouse event via CDP
+   */
+  async dispatchMouseEvent(sessionId: string, type: string, x: number, y: number, button?: string): Promise<void> {
+    const instance = activeBrowsers.get(sessionId);
+    if (!instance?.cdpSession) {
+      throw new Error("Session not streaming");
+    }
+
+    await instance.cdpSession.send('Input.dispatchMouseEvent', {
+      type,
+      x,
+      y,
+      button: button || 'left',
+      clickCount: type === 'mousePressed' ? 1 : undefined,
+    } as any);
+
+    await this.saveCookies(sessionId, instance.page);
+  }
+
+  /**
+   * Dispatch keyboard event via CDP
+   */
+  async dispatchKeyEvent(sessionId: string, type: string, key: string, text?: string): Promise<void> {
+    const instance = activeBrowsers.get(sessionId);
+    if (!instance?.cdpSession) {
+      throw new Error("Session not streaming");
+    }
+
+    await instance.cdpSession.send('Input.dispatchKeyEvent', {
+      type,
+      key,
+      text,
+    } as any);
+  }
+
+  /**
+   * Dispatch scroll event via CDP
+   */
+  async dispatchScrollEvent(sessionId: string, deltaX: number, deltaY: number): Promise<void> {
+    const instance = activeBrowsers.get(sessionId);
+    if (!instance?.page) {
+      throw new Error("Session not running");
+    }
+
+    await instance.page.evaluate((dx, dy) => {
+      window.scrollBy(dx, dy);
+    }, deltaX, deltaY);
   }
 }
 

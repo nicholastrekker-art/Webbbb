@@ -228,6 +228,87 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/sessions/:id/back", isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+
+      const session = await storage.getBrowserSession(id);
+      if (!session) {
+        return res.status(404).json({ message: "Session not found" });
+      }
+
+      // Verify ownership
+      const userId = req.user.id;
+      if (session.userId !== userId) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+
+      if (!browserManager.isSessionActive(id)) {
+        return res.status(400).json({ message: "Session not running" });
+      }
+
+      await browserManager.goBack(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error going back:", error);
+      res.status(500).json({ message: "Failed to go back" });
+    }
+  });
+
+  app.post("/api/sessions/:id/forward", isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+
+      const session = await storage.getBrowserSession(id);
+      if (!session) {
+        return res.status(404).json({ message: "Session not found" });
+      }
+
+      // Verify ownership
+      const userId = req.user.id;
+      if (session.userId !== userId) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+
+      if (!browserManager.isSessionActive(id)) {
+        return res.status(400).json({ message: "Session not running" });
+      }
+
+      await browserManager.goForward(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error going forward:", error);
+      res.status(500).json({ message: "Failed to go forward" });
+    }
+  });
+
+  app.post("/api/sessions/:id/refresh", isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+
+      const session = await storage.getBrowserSession(id);
+      if (!session) {
+        return res.status(404).json({ message: "Session not found" });
+      }
+
+      // Verify ownership
+      const userId = req.user.id;
+      if (session.userId !== userId) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+
+      if (!browserManager.isSessionActive(id)) {
+        return res.status(400).json({ message: "Session not running" });
+      }
+
+      await browserManager.refresh(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error refreshing:", error);
+      res.status(500).json({ message: "Failed to refresh" });
+    }
+  });
+
   app.post("/api/sessions/:id/click", isAuthenticated, async (req: any, res) => {
     try {
       const { id } = req.params;

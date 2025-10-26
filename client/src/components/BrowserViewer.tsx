@@ -9,7 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { RefreshCw, ArrowLeft, ArrowRight, Home } from "lucide-react";
+import { RefreshCw, ArrowLeft, ArrowRight, Home, Upload } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { BrowserSession } from "@shared/schema";
@@ -22,40 +22,78 @@ interface BrowserViewerProps {
 
 export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProps) {
   const { toast } = useToast();
-  const [screenshot, setScreenshot] = useState<string | null>(null);
   const [currentUrl, setCurrentUrl] = useState(session.url);
   const [urlInput, setUrlInput] = useState(session.url);
   const [isLoading, setIsLoading] = useState(false);
-  const [refreshInterval, setRefreshInterval] = useState<NodeJS.Timeout | null>(null);
-  const imageRef = useRef<HTMLImageElement>(null);
+  const [isConnected, setIsConnected] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Load screenshot
-  const loadScreenshot = async () => {
-    if (!open || session.status !== "running") return;
+  const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}?sessionId=${session.id}`;
 
-    try {
-      const response = await fetch(`/api/sessions/${session.id}/screenshot`, {
-        credentials: "include",
-      });
-
-      if (response.ok) {
-        const blob = await response.blob();
-        const url = URL.createObjectURL(blob);
-        setScreenshot(url);
-      } else {
-        const data = await response.json();
-        toast({
-          title: "Error",
-          description: data.message || "Failed to load screenshot",
-          variant: "destructive",
-        });
+  useEffect(() => {
+    if (!open || session.status !== "running") {
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
       }
-    } catch (error) {
-      console.error("Failed to load screenshot:", error);
+      setIsConnected(false);
+      return;
     }
-  };
 
-  // Navigate to URL
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      console.log('WebSocket connected');
+      setIsConnected(true);
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        
+        if (message.type === 'frame' && canvasRef.current) {
+          const canvas = canvasRef.current;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return;
+
+          const img = new Image();
+          img.onload = () => {
+            canvas.width = session.viewportWidth || 1920;
+            canvas.height = session.viewportHeight || 1080;
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          };
+          img.src = `data:image/jpeg;base64,${message.data}`;
+        }
+      } catch (error) {
+        console.error('Error handling WebSocket message:', error);
+      }
+    };
+
+    ws.onerror = (error) => {
+      console.error('WebSocket error:', error);
+      toast({
+        title: "Connection Error",
+        description: "Failed to connect to browser stream",
+        variant: "destructive",
+      });
+    };
+
+    ws.onclose = () => {
+      console.log('WebSocket disconnected');
+      setIsConnected(false);
+    };
+
+    return () => {
+      ws.close();
+    };
+  }, [open, session.status, session.id, session.viewportWidth, session.viewportHeight, wsUrl, toast]);
+
   const handleNavigate = async (url?: string) => {
     const targetUrl = url || urlInput;
     if (!targetUrl) return;
@@ -64,14 +102,12 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
     try {
       const response = await apiRequest("POST", `/api/sessions/${session.id}/navigate`, {
         url: targetUrl,
-      });
+      }) as any;
 
-      if (response.currentUrl) {
+      if (response?.currentUrl) {
         setCurrentUrl(response.currentUrl);
         setUrlInput(response.currentUrl);
       }
-
-      await loadScreenshot();
 
       toast({
         title: "Success",
@@ -88,274 +124,319 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
     }
   };
 
-  // Handle click on screenshot
-  const handleImageClick = async (e: React.MouseEvent<HTMLImageElement>) => {
-    if (!imageRef.current || session.status !== "running") return;
+  const sendMouseEvent = (eventType: string, x: number, y: number, button: string = 'left') => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        type: 'mouseEvent',
+        eventType,
+        x,
+        y,
+        button,
+      }));
+    }
+  };
 
-    const rect = imageRef.current.getBoundingClientRect();
+  const sendKeyEvent = (eventType: string, key: string, text?: string) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        type: 'keyEvent',
+        eventType,
+        key,
+        text,
+      }));
+    }
+  };
+
+  const sendScrollEvent = (deltaX: number, deltaY: number) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        type: 'scroll',
+        deltaX,
+        deltaY,
+      }));
+    }
+  };
+
+  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!canvasRef.current || !isConnected) return;
+
+    const rect = canvasRef.current.getBoundingClientRect();
     const scaleX = (session.viewportWidth || 1920) / rect.width;
     const scaleY = (session.viewportHeight || 1080) / rect.height;
 
     const x = (e.clientX - rect.left) * scaleX;
     const y = (e.clientY - rect.top) * scaleY;
 
-    try {
-      await apiRequest("POST", `/api/sessions/${session.id}/click`, { x, y });
+    sendMouseEvent('mousePressed', x, y);
+    sendMouseEvent('mouseReleased', x, y);
+  };
 
-      // Refresh screenshot after a short delay to show the result
-      setTimeout(loadScreenshot, 1000);
+  const handleCanvasMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!canvasRef.current || !isConnected) return;
 
+    const rect = canvasRef.current.getBoundingClientRect();
+    const scaleX = (session.viewportWidth || 1920) / rect.width;
+    const scaleY = (session.viewportHeight || 1080) / rect.height;
+
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
+
+    sendMouseEvent('mouseMoved', x, y);
+  };
+
+  const handleCanvasWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    sendScrollEvent(e.deltaX, e.deltaY);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    e.preventDefault();
+    
+    let key = e.key;
+    if (key === ' ') key = 'Space';
+    else if (key === 'Enter') key = 'Enter';
+    else if (key === 'Backspace') key = 'Backspace';
+    else if (key === 'Tab') key = 'Tab';
+    else if (key === 'Escape') key = 'Escape';
+    else if (key === 'ArrowUp') key = 'ArrowUp';
+    else if (key === 'ArrowDown') key = 'ArrowDown';
+    else if (key === 'ArrowLeft') key = 'ArrowLeft';
+    else if (key === 'ArrowRight') key = 'ArrowRight';
+
+    const text = e.key.length === 1 ? e.key : undefined;
+    sendKeyEvent('keyDown', key, text);
+  };
+
+  const handleKeyUp = (e: React.KeyboardEvent) => {
+    e.preventDefault();
+    
+    let key = e.key;
+    if (key === ' ') key = 'Space';
+    else if (key === 'Enter') key = 'Enter';
+    else if (key === 'Backspace') key = 'Backspace';
+
+    sendKeyEvent('keyUp', key);
+  };
+
+  const handleFileUpload = async () => {
+    if (!selectedFile) {
       toast({
-        title: "Clicked",
-        description: `Clicked at (${Math.round(x)}, ${Math.round(y)})`,
+        title: "No File Selected",
+        description: "Please select a file to upload",
+        variant: "destructive",
       });
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', selectedFile);
+
+    try {
+      await apiRequest("POST", `/api/sessions/${session.id}/upload`, formData);
+      
+      toast({
+        title: "Success",
+        description: "File uploaded successfully",
+      });
+      
+      setSelectedFile(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     } catch (error: any) {
       toast({
         title: "Error",
-        description: error.message || "Failed to click",
+        description: error.message || "Failed to upload file",
         variant: "destructive",
       });
     }
   };
 
-  // Set up auto-refresh
-  useEffect(() => {
-    if (open && session.status === "running") {
-      loadScreenshot();
-
-      const interval = setInterval(loadScreenshot, 3000); // Refresh every 3 seconds
-      setRefreshInterval(interval);
-
-      return () => {
-        clearInterval(interval);
-      };
-    } else if (refreshInterval) {
-      clearInterval(refreshInterval);
-      setRefreshInterval(null);
+  const handleGoBack = async () => {
+    try {
+      await apiRequest("POST", `/api/sessions/${session.id}/back`);
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to go back",
+        variant: "destructive",
+      });
     }
-  }, [open, session.status]);
+  };
 
-  // Clean up screenshot URL
-  useEffect(() => {
-    return () => {
-      if (screenshot) {
-        URL.revokeObjectURL(screenshot);
-      }
-    };
-  }, [screenshot]);
+  const handleGoForward = async () => {
+    try {
+      await apiRequest("POST", `/api/sessions/${session.id}/forward`);
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to go forward",
+        variant: "destructive",
+      });
+    }
+  };
 
-  // Function to refresh screenshot
-  const refreshScreenshot = () => {
-    loadScreenshot();
+  const handleRefresh = async () => {
+    try {
+      await apiRequest("POST", `/api/sessions/${session.id}/refresh`);
+      toast({
+        title: "Success",
+        description: "Page refreshed",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to refresh",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[90vw] max-h-[90vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle className="text-2xl font-semibold">Browser View</DialogTitle>
-          <DialogDescription className="font-mono text-xs">{session.url}</DialogDescription>
+      <DialogContent 
+        className="max-w-[95vw] w-full h-[95vh] flex flex-col p-0"
+        data-testid="browser-viewer-dialog"
+        onKeyDown={handleKeyDown}
+        onKeyUp={handleKeyUp}
+        tabIndex={0}
+      >
+        <DialogHeader className="px-6 pt-6 pb-4">
+          <DialogTitle className="text-2xl font-semibold">Live Browser Session</DialogTitle>
+          <DialogDescription>
+            Interact with the browser in real-time - click, type, scroll, and navigate
+          </DialogDescription>
         </DialogHeader>
 
-        {session.status !== "running" ? (
-          <div className="flex-1 flex items-center justify-center p-12 text-center">
-            <div>
-              <p className="text-lg font-medium mb-2">Session Not Running</p>
-              <p className="text-sm text-muted-foreground">
-                Start the session to view and interact with the browser
-              </p>
-            </div>
-          </div>
-        ) : (
-          <div className="flex-1 flex flex-col gap-4 overflow-hidden">
-            {/* Navigation Controls */}
-            <div className="flex items-center gap-2">
-              <Button
-                size="icon"
-                variant="outline"
-                onClick={() => handleNavigate(currentUrl)}
-                disabled={isLoading}
-                data-testid="button-refresh"
-              >
-                <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
-              </Button>
-              <div className="flex-1 flex items-center gap-2">
-                <Label htmlFor="url-input" className="sr-only">
-                  URL
-                </Label>
-                <Input
-                  id="url-input"
-                  value={urlInput}
-                  onChange={(e) => setUrlInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      handleNavigate();
-                    }
-                  }}
-                  placeholder="Enter URL..."
-                  className="h-10 font-mono text-sm"
-                  data-testid="input-browser-url"
-                />
-                <Button
-                  onClick={() => handleNavigate()}
-                  disabled={isLoading}
-                  data-testid="button-navigate"
-                >
-                  Go
-                </Button>
-              </div>
-            </div>
-
-            {/* Browser Screenshot */}
-            <div className="flex-1 overflow-auto border rounded-md bg-muted/30">
-              {screenshot ? (
-                <img
-                  ref={imageRef}
-                  src={screenshot}
-                  alt="Browser screenshot"
-                  className="w-full h-auto cursor-pointer"
-                  onClick={handleImageClick}
-                  data-testid="browser-screenshot"
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center p-12">
-                  <div className="text-center">
-                    <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-2 text-muted-foreground" />
-                    <p className="text-sm text-muted-foreground">Loading browser view...</p>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="text-xs text-muted-foreground text-center">
-              Click anywhere on the screenshot to interact with the browser
-            </div>
-
-            {/* Keyboard Input */}
-            <div className="flex items-center gap-2 pt-2 border-t">
-              <Label htmlFor="keyboard-input" className="text-sm font-medium whitespace-nowrap">
-                Type:
-              </Label>
+        <div className="flex-1 flex flex-col px-6 pb-6 gap-4 overflow-hidden">
+          <div className="flex items-center gap-2">
+            <Button
+              size="icon"
+              variant="outline"
+              onClick={handleGoBack}
+              disabled={!isConnected}
+              data-testid="button-back"
+              title="Go Back"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </Button>
+            <Button
+              size="icon"
+              variant="outline"
+              onClick={handleGoForward}
+              disabled={!isConnected}
+              data-testid="button-forward"
+              title="Go Forward"
+            >
+              <ArrowRight className="w-4 h-4" />
+            </Button>
+            <Button
+              size="icon"
+              variant="outline"
+              onClick={handleRefresh}
+              disabled={!isConnected}
+              data-testid="button-refresh"
+              title="Refresh"
+            >
+              <RefreshCw className="w-4 h-4" />
+            </Button>
+            <Button
+              size="icon"
+              variant="outline"
+              onClick={() => handleNavigate(session.url)}
+              disabled={!isConnected}
+              data-testid="button-home"
+              title="Home"
+            >
+              <Home className="w-4 h-4" />
+            </Button>
+            
+            <div className="flex-1 flex items-center gap-2">
               <Input
-                id="keyboard-input"
                 type="text"
-                placeholder="Type text to send to browser..."
-                className="flex-1"
-                onKeyDown={async (e) => {
-                  if (e.key === 'Enter' && e.currentTarget.value) {
-                    const text = e.currentTarget.value;
-                    e.currentTarget.value = '';
-
-                    try {
-                      await apiRequest("POST", `/api/sessions/${session.id}/type`, { text });
-                      setTimeout(loadScreenshot, 500);
-                      toast({
-                        title: "Text sent",
-                        description: `Typed: ${text.substring(0, 30)}${text.length > 30 ? '...' : ''}`,
-                      });
-                    } catch (error: any) {
-                      toast({
-                        title: "Error",
-                        description: error.message || "Failed to send text",
-                        variant: "destructive",
-                      });
-                    }
+                value={urlInput}
+                onChange={(e) => setUrlInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.stopPropagation();
+                    handleNavigate();
                   }
                 }}
-                data-testid="input-keyboard"
+                placeholder="https://example.com"
+                className="font-mono text-sm"
+                disabled={!isConnected}
+                data-testid="input-url"
               />
               <Button
-                size="sm"
-                variant="outline"
-                onClick={async () => {
-                  try {
-                    await apiRequest("POST", `/api/sessions/${session.id}/type`, { key: "Enter" });
-                    setTimeout(loadScreenshot, 500);
-                    toast({
-                      title: "Key pressed",
-                      description: "Sent Enter key",
-                    });
-                  } catch (error: any) {
-                    toast({
-                      title: "Error",
-                      description: error.message || "Failed to send key",
-                      variant: "destructive",
-                    });
-                  }
-                }}
+                onClick={() => handleNavigate()}
+                disabled={isLoading || !isConnected}
+                data-testid="button-navigate"
               >
-                Enter ↵
+                Go
               </Button>
             </div>
-
-            {/* File Upload */}
-            <div className="flex items-center gap-2 pt-2 border-t">
-              <Label htmlFor="file-upload" className="text-sm font-medium whitespace-nowrap">
-                Upload File:
-              </Label>
-              <Input
-                id="file-upload"
-                type="file"
-                className="flex-1"
-                onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-
-                  const formData = new FormData();
-                  formData.append('file', file);
-
-                  // Show loading toast
-                  const loadingToast = toast({
-                    title: "Uploading...",
-                    description: `Uploading ${file.name}`,
-                  });
-
-                  try {
-                    const response = await fetch(`/api/sessions/${session.id}/upload`, {
-                      method: 'POST',
-                      credentials: 'include',
-                      body: formData,
-                    });
-
-                    if (!response.ok) {
-                      const data = await response.json();
-                      throw new Error(data.message || 'Upload failed');
-                    }
-
-                    const result = await response.json();
-
-                    toast({
-                      title: "File uploaded successfully",
-                      description: `${file.name} has been uploaded to the file input on the page`,
-                    });
-
-                    // Clear the file input
-                    e.target.value = '';
-
-                    // Refresh screenshot after upload to show the result
-                    setTimeout(() => {
-                      refreshScreenshot();
-                    }, 1000);
-
-                  } catch (error: any) {
-                    toast({
-                      title: "Upload failed",
-                      description: error.message || 'Make sure the page has a file upload field',
-                      variant: "destructive",
-                    });
-
-                    // Clear the file input even on error
-                    e.target.value = '';
-                  }
-                }}
-                data-testid="input-file-upload"
-              />
-              <p className="text-xs text-muted-foreground col-span-2">
-                Select a file to upload to any file input field on the current page
-              </p>
-            </div>
           </div>
-        )}
+
+          <div className="flex items-center gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+              className="flex-1 text-sm"
+              data-testid="input-file"
+            />
+            <Button
+              onClick={handleFileUpload}
+              disabled={!selectedFile || !isConnected}
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              data-testid="button-upload"
+            >
+              <Upload className="w-4 h-4" />
+              Upload File
+            </Button>
+          </div>
+
+          {!isConnected && (
+            <div className="bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 p-3 rounded-md text-sm">
+              {session.status !== "running" 
+                ? "Session is not running. Start the session to view the browser."
+                : "Connecting to browser stream..."}
+            </div>
+          )}
+
+          <div 
+            ref={containerRef}
+            className="flex-1 border rounded-md overflow-hidden bg-gray-100 dark:bg-gray-900 relative"
+            style={{ minHeight: 0 }}
+          >
+            <canvas
+              ref={canvasRef}
+              onClick={handleCanvasClick}
+              onMouseMove={handleCanvasMouseMove}
+              onWheel={handleCanvasWheel}
+              className="w-full h-full object-contain cursor-pointer"
+              style={{ imageRendering: 'auto' }}
+              data-testid="canvas-browser"
+            />
+            {!isConnected && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 dark:border-gray-100 mx-auto mb-4"></div>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    {session.status === "running" ? "Connecting..." : "Session Stopped"}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="text-xs text-muted-foreground">
+            <strong>Tip:</strong> Click on the canvas to interact with the browser. 
+            Type anywhere to send keyboard input. Use the mouse wheel to scroll.
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   );

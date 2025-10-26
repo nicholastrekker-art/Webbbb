@@ -14,15 +14,17 @@ const ADMIN_USER: User = {
   username: process.env.ADMIN_USERNAME,
 };
 
+// Create shared session store
+const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
+const MemStore = MemoryStore(session);
+export const sessionStore = new MemStore({
+  checkPeriod: sessionTtl,
+});
+
 export function getSession() {
-  const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
-  const MemStore = MemoryStore(session);
-  
   return session({
     secret: process.env.SESSION_SECRET || "browser-automation-secret-key-change-in-production",
-    store: new MemStore({
-      checkPeriod: sessionTtl,
-    }),
+    store: sessionStore,
     resave: false,
     saveUninitialized: false,
     cookie: {
