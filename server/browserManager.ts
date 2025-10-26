@@ -31,9 +31,17 @@ export class BrowserSessionManager {
       // Find Chromium executable in Nix store
       let executablePath: string | undefined;
       try {
-        executablePath = execSync('which chromium-browser || which chromium').toString().trim();
+        // Try to find chromium in the Nix store
+        const chromiumPath = execSync('which chromium 2>/dev/null || echo ""').toString().trim();
+        if (chromiumPath) {
+          executablePath = chromiumPath;
+          console.log(`Using Chromium from: ${executablePath}`);
+        } else {
+          throw new Error('Chromium not found in PATH');
+        }
       } catch (e) {
-        console.log('Chromium not found in PATH, using default');
+        console.error('Failed to find Chromium executable:', e);
+        throw new Error('Chromium is not installed. Please ensure Nix dependencies are properly configured.');
       }
 
       // Launch browser
