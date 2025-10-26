@@ -48,14 +48,18 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
       return;
     }
 
-    // Add a small delay to ensure the session is fully ready
-    const connectTimeout = setTimeout(() => {
+    let retryCount = 0;
+    const maxRetries = 5;
+    let retryTimeout: NodeJS.Timeout;
+
+    const connectWebSocket = () => {
       const ws = new WebSocket(`${wsUrl}?sessionId=${session.id}`);
       wsRef.current = ws;
 
       ws.onopen = () => {
         console.log('WebSocket connected');
         setIsConnected(true);
+        retryCount = 0; // Reset retry count on successful connection
       };
 
       ws.onmessage = (event) => {
@@ -81,21 +85,35 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
 
       ws.onerror = (error) => {
         console.error('WebSocket error:', error);
-        toast({
-          title: "Connection Error",
-          description: "Failed to connect to browser stream",
-          variant: "destructive",
-        });
       };
 
-      ws.onclose = () => {
-        console.log('WebSocket disconnected');
+      ws.onclose = (event) => {
+        console.log('WebSocket disconnected', event.code, event.reason);
         setIsConnected(false);
+        wsRef.current = null;
+
+        // Retry connection with exponential backoff if not max retries
+        if (retryCount < maxRetries && open && session.status === "running") {
+          retryCount++;
+          const backoffTime = Math.min(1000 * Math.pow(2, retryCount - 1), 5000);
+          console.log(`Retrying WebSocket connection in ${backoffTime}ms (attempt ${retryCount}/${maxRetries})`);
+          retryTimeout = setTimeout(connectWebSocket, backoffTime);
+        } else if (retryCount >= maxRetries) {
+          toast({
+            title: "Connection Failed",
+            description: "Could not establish connection to browser stream. Please try refreshing.",
+            variant: "destructive",
+          });
+        }
       };
-    }, 100);
+    };
+
+    // Initial connection with a delay to ensure session is ready
+    const initialTimeout = setTimeout(connectWebSocket, 500);
 
     return () => {
-      clearTimeout(connectTimeout);
+      clearTimeout(initialTimeout);
+      clearTimeout(retryTimeout);
       if (wsRef.current) {
         wsRef.current.close();
         wsRef.current = null;
