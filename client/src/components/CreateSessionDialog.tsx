@@ -45,7 +45,7 @@ export function CreateSessionDialog({ userId, onSubmit, isPending }: CreateSessi
     resolver: zodResolver(insertBrowserSessionSchema),
     defaultValues: {
       userId,
-      url: "about:blank",
+      url: "https://deriv.com/",
       status: "stopped",
       viewportWidth: 1920,
       viewportHeight: 1080,
