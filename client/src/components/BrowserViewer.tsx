@@ -286,7 +286,7 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
             {/* File Upload */}
             <div className="flex items-center gap-2 pt-2 border-t">
               <Label htmlFor="file-upload" className="text-sm font-medium whitespace-nowrap">
-                Upload:
+                Upload File:
               </Label>
               <Input
                 id="file-upload"
@@ -298,6 +298,12 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
 
                   const formData = new FormData();
                   formData.append('file', file);
+
+                  // Show loading toast
+                  const loadingToast = toast({
+                    title: "Uploading...",
+                    description: `Uploading ${file.name}`,
+                  });
 
                   try {
                     const response = await fetch(`/api/sessions/${session.id}/upload`, {
@@ -311,23 +317,32 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
                       throw new Error(data.message || 'Upload failed');
                     }
 
-                    setTimeout(loadScreenshot, 1000);
+                    const result = await response.json();
+
+                    // Refresh screenshot multiple times to show the upload
+                    setTimeout(loadScreenshot, 500);
+                    setTimeout(loadScreenshot, 1500);
+                    setTimeout(loadScreenshot, 3000);
+
                     toast({
-                      title: "File uploaded",
-                      description: `Uploaded: ${file.name}`,
+                      title: "File uploaded successfully",
+                      description: `${file.name} has been set in the file input field`,
                     });
 
                     e.target.value = '';
                   } catch (error: any) {
                     toast({
-                      title: "Error",
-                      description: error.message || "Failed to upload file",
+                      title: "Upload failed",
+                      description: error.message || "Failed to upload file. Make sure the page has a file input field.",
                       variant: "destructive",
                     });
                   }
                 }}
                 data-testid="input-file-upload"
               />
+              <p className="text-xs text-muted-foreground">
+                Select a file to upload to the first file input on the page
+              </p>
             </div>
           </div>
         )}

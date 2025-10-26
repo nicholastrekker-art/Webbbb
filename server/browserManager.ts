@@ -268,6 +268,13 @@ export class BrowserSessionManager {
       throw new Error("Session not running");
     }
 
+    // Wait for file input to be available on the page
+    try {
+      await instance.page.waitForSelector('input[type="file"]', { timeout: 5000 });
+    } catch (error) {
+      throw new Error("No file input found on page. Please navigate to a page with a file upload field.");
+    }
+
     // Find all file input elements on the page
     const fileInputs = await instance.page.$$('input[type="file"]');
     
@@ -275,8 +282,34 @@ export class BrowserSessionManager {
       throw new Error("No file input found on page");
     }
 
-    // Upload to the first visible file input
-    await fileInputs[0].uploadFile(filePath);
+    // Find the first visible and enabled file input
+    let targetInput = null;
+    for (const input of fileInputs) {
+      const isVisible = await input.isVisible();
+      const isEnabled = await input.evaluate((el: HTMLInputElement) => !el.disabled);
+      
+      if (isVisible && isEnabled) {
+        targetInput = input;
+        break;
+      }
+    }
+
+    if (!targetInput) {
+      // If no visible input, use the first one anyway
+      targetInput = fileInputs[0];
+    }
+
+    // Upload the file
+    await targetInput.uploadFile(filePath);
+
+    // Trigger change event to ensure the page recognizes the upload
+    await targetInput.evaluate((el: HTMLInputElement) => {
+      const event = new Event('change', { bubbles: true });
+      el.dispatchEvent(event);
+    });
+
+    // Small delay to let the page process the file
+    await instance.page.waitForTimeout(500);
   }
 
   /**
