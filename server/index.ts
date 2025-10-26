@@ -226,6 +226,14 @@ app.use((req, res, next) => {
         // Ignore errors when closing
       }
     }
+    } catch (error) {
+      log(`WebSocket connection error: ${error}`);
+      try {
+        ws.close(1011, 'Internal server error');
+      } catch (closeError) {
+        // Ignore errors when closing
+      }
+    }
   });
 
   // Handle WebSocket server errors
