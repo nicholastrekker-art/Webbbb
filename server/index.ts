@@ -97,9 +97,11 @@ app.use((req, res, next) => {
   const wss = new WebSocketServer({ server });
 
   wss.on('connection', async (ws, req: any) => {
+    let browserSessionId: string | null = null;
+    
     try {
       const url = new URL(req.url || '', `http://${req.headers.host}`);
-      const browserSessionId = url.searchParams.get('sessionId');
+      browserSessionId = url.searchParams.get('sessionId');
 
       log(`WebSocket connection attempt for session: ${browserSessionId}`);
 
@@ -109,15 +111,14 @@ app.use((req, res, next) => {
         return;
       }
 
-    // Create a mock response object for middleware
-    const res: any = {
-      getHeader: () => null,
-      setHeader: () => null,
-      writeHead: () => null,
-      end: () => null,
-    };
+      // Create a mock response object for middleware
+      const res: any = {
+        getHeader: () => null,
+        setHeader: () => null,
+        writeHead: () => null,
+        end: () => null,
+      };
 
-    try {
       // Run session middleware to populate req.session
       await runMiddleware(req, res, sessionMiddleware);
       
@@ -128,14 +129,14 @@ app.use((req, res, next) => {
       // Verify user is authenticated
       if (!req.isAuthenticated || !req.isAuthenticated()) {
         log(`WebSocket auth failed: User not authenticated`);
-        ws.close(4403, 'Authentication required');
+        ws.close(1008, 'Authentication required');
         return;
       }
 
       const userId = req.user?.id;
       if (!userId) {
         log(`WebSocket auth failed: No user ID`);
-        ws.close(4403, 'Authentication required');
+        ws.close(1008, 'Authentication required');
         return;
       }
 
@@ -143,14 +144,14 @@ app.use((req, res, next) => {
       const browserSession = await storage.getBrowserSession(browserSessionId);
       if (!browserSession) {
         log(`WebSocket auth failed: Browser session not found`);
-        ws.close(4403, 'Permission denied');
+        ws.close(1008, 'Permission denied');
         return;
       }
 
       // Verify ownership: the authenticated user must own the browser session
       if (browserSession.userId !== userId) {
         log(`WebSocket auth failed: User ${userId} does not own browser session ${browserSessionId}`);
-        ws.close(4403, 'Permission denied');
+        ws.close(1008, 'Permission denied');
         return;
       }
 
@@ -164,7 +165,7 @@ app.use((req, res, next) => {
           log(`Browser session ${browserSessionId} started successfully`);
         } catch (error) {
           log(`Failed to start browser session ${browserSessionId}: ${error}`);
-          ws.close(4500, 'Failed to start browser session');
+          ws.close(1011, 'Failed to start browser session');
           return;
         }
       }
@@ -179,7 +180,7 @@ app.use((req, res, next) => {
 
           if (data.type === 'mouseEvent') {
             await browserManager.dispatchMouseEvent(
-              browserSessionId,
+              browserSessionId!,
               data.eventType,
               data.x,
               data.y,
@@ -187,14 +188,14 @@ app.use((req, res, next) => {
             );
           } else if (data.type === 'keyEvent') {
             await browserManager.dispatchKeyEvent(
-              browserSessionId,
+              browserSessionId!,
               data.eventType,
               data.key,
               data.text
             );
           } else if (data.type === 'scroll') {
             await browserManager.dispatchScrollEvent(
-              browserSessionId,
+              browserSessionId!,
               data.deltaX,
               data.deltaY
             );
@@ -206,32 +207,23 @@ app.use((req, res, next) => {
 
       ws.on('close', async () => {
         log(`WebSocket disconnected for browser session ${browserSessionId}`);
-        await browserManager.stopScreencast(browserSessionId, ws);
+        if (browserSessionId) {
+          await browserManager.stopScreencast(browserSessionId, ws);
+        }
       });
 
       ws.on('error', (error) => {
-        console.error('WebSocket error:', error);
-        // Don't crash the server on WebSocket errors
+        console.error('WebSocket client error:', error);
+      });
+    } catch (error) {
+      log(`WebSocket connection error: ${error}`);
+      // Use a valid close code (1011 = Internal Error)
+      if (ws.readyState === ws.OPEN || ws.readyState === ws.CONNECTING) {
         try {
-          ws.close();
+          ws.close(1011);
         } catch (closeError) {
           // Ignore errors when closing
         }
-      });
-    } catch (error) {
-      log(`WebSocket auth error: ${error}`);
-      try {
-        ws.close(4403, 'Authentication required');
-      } catch (closeError) {
-        // Ignore errors when closing
-      }
-    }
-    } catch (error) {
-      log(`WebSocket connection error: ${error}`);
-      try {
-        ws.close(1011, 'Internal server error');
-      } catch (closeError) {
-        // Ignore errors when closing
       }
     }
   });
@@ -239,6 +231,15 @@ app.use((req, res, next) => {
   // Handle WebSocket server errors
   wss.on('error', (error) => {
     console.error('WebSocket server error:', error);
+    // Don't crash the server on WebSocket errors
+  });
+
+  // Handle server upgrade errors
+  server.on('upgrade', (request, socket, head) => {
+    socket.on('error', (error) => {
+      console.error('WebSocket upgrade error:', error);
+      // Don't crash on upgrade errors
+    });
   });
 
   // ALWAYS serve the app on the port specified in the environment variable PORT
