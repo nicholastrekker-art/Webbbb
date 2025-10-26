@@ -309,7 +309,7 @@ export class BrowserSessionManager {
     });
 
     // Small delay to let the page process the file
-    await instance.page.waitForTimeout(500);
+    await new Promise(resolve => setTimeout(resolve, 500));
   }
 
   /**
