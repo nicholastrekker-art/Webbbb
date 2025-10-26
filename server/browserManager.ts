@@ -3,6 +3,7 @@ import StealthPlugin from "puppeteer-extra-plugin-stealth";
 import type { Cookie as PuppeteerCookie } from "puppeteer";
 import { storage } from "./storage";
 import type { BrowserSession } from "@shared/schema";
+import { execSync } from "child_process";
 
 // Use stealth plugin to avoid detection
 puppeteer.use(StealthPlugin());
@@ -27,14 +28,25 @@ export class BrowserSessionManager {
     }
 
     try {
+      // Find Chromium executable in Nix store
+      let executablePath: string | undefined;
+      try {
+        executablePath = execSync('which chromium-browser || which chromium').toString().trim();
+      } catch (e) {
+        console.log('Chromium not found in PATH, using default');
+      }
+
       // Launch browser
       const browser = await puppeteer.launch({
         headless: true,
+        executablePath: executablePath,
         args: [
           "--no-sandbox",
           "--disable-setuid-sandbox",
           "--disable-dev-shm-usage",
           "--disable-gpu",
+          "--disable-software-rasterizer",
+          "--disable-extensions",
         ],
       });
 
