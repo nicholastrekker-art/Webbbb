@@ -225,6 +225,63 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
             <div className="text-xs text-muted-foreground text-center">
               Click anywhere on the screenshot to interact with the browser
             </div>
+
+            {/* Keyboard Input */}
+            <div className="flex items-center gap-2 pt-2 border-t">
+              <Label htmlFor="keyboard-input" className="text-sm font-medium whitespace-nowrap">
+                Type:
+              </Label>
+              <Input
+                id="keyboard-input"
+                type="text"
+                placeholder="Type text to send to browser..."
+                className="flex-1"
+                onKeyDown={async (e) => {
+                  if (e.key === 'Enter' && e.currentTarget.value) {
+                    const text = e.currentTarget.value;
+                    e.currentTarget.value = '';
+                    
+                    try {
+                      await apiRequest("POST", `/api/sessions/${session.id}/type`, { text });
+                      setTimeout(loadScreenshot, 500);
+                      toast({
+                        title: "Text sent",
+                        description: `Typed: ${text.substring(0, 30)}${text.length > 30 ? '...' : ''}`,
+                      });
+                    } catch (error: any) {
+                      toast({
+                        title: "Error",
+                        description: error.message || "Failed to send text",
+                        variant: "destructive",
+                      });
+                    }
+                  }
+                }}
+                data-testid="input-keyboard"
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={async () => {
+                  try {
+                    await apiRequest("POST", `/api/sessions/${session.id}/type`, { key: "Enter" });
+                    setTimeout(loadScreenshot, 500);
+                    toast({
+                      title: "Key pressed",
+                      description: "Sent Enter key",
+                    });
+                  } catch (error: any) {
+                    toast({
+                      title: "Error",
+                      description: error.message || "Failed to send key",
+                      variant: "destructive",
+                    });
+                  }
+                }}
+              >
+                Enter ↵
+              </Button>
+            </div>
           </div>
         )}
       </DialogContent>
