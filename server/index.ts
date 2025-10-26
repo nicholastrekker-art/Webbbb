@@ -94,7 +94,8 @@ app.use((req, res, next) => {
   };
 
   // Set up WebSocket server for browser streaming with authentication
-  const wss = new WebSocketServer({ server });
+  // Use a specific path to avoid conflicts with Vite HMR WebSocket
+  const wss = new WebSocketServer({ noServer: true });
 
   wss.on('connection', async (ws, req: any) => {
     let browserSessionId: string | null = null;
@@ -104,8 +105,9 @@ app.use((req, res, next) => {
       browserSessionId = url.searchParams.get('sessionId');
 
       // Silently ignore WebSocket connections without sessionId (e.g., Vite HMR)
+      // This prevents Vite HMR from causing repeated connection/rejection logs
       if (!browserSessionId) {
-        ws.terminate();
+        ws.close(1000, 'No session ID'); // Use close instead of terminate for cleaner shutdown
         return;
       }
 
@@ -237,8 +239,17 @@ app.use((req, res, next) => {
     // Don't crash the server on WebSocket errors
   });
 
-  // Handle server upgrade errors
+  // Handle server upgrade errors - only handle browser session WebSocket connections
   server.on('upgrade', (request, socket, head) => {
+    const url = new URL(request.url || '', `http://${request.headers.host}`);
+    const sessionId = url.searchParams.get('sessionId');
+    
+    // Only handle WebSocket upgrades that have a sessionId (browser sessions)
+    // Let Vite handle its own HMR WebSocket connections
+    if (!sessionId) {
+      return; // Let other handlers (like Vite) handle this
+    }
+
     socket.on('error', (error) => {
       console.error('WebSocket upgrade error:', error);
       // Don't crash on upgrade errors
