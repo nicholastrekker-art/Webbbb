@@ -89,11 +89,11 @@ export class BrowserSessionManager {
       }
 
       // Navigate to URL if provided
-      if (session.url && session.url.trim() !== "") {
-        await page.goto(session.url, { waitUntil: "networkidle0", timeout: 30000 });
+      if (session.url && session.url.trim() !== "" && session.url !== "about:blank") {
+        await page.goto(session.url, { waitUntil: "domcontentloaded", timeout: 60000 });
       } else {
         // Navigate to blank page if no URL specified
-        await page.goto("about:blank", { waitUntil: "networkidle0", timeout: 30000 });
+        await page.goto("about:blank", { waitUntil: "load", timeout: 5000 });
       }
 
       // Save cookies back to storage
@@ -196,7 +196,7 @@ export class BrowserSessionManager {
       throw new Error("Session not running");
     }
 
-    await instance.page.goto(url, { waitUntil: "networkidle0", timeout: 30000 });
+    await instance.page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
     
     // Update session URL and save cookies
     await storage.updateBrowserSession(sessionId, {
