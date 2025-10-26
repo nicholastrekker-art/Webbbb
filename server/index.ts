@@ -247,7 +247,8 @@ app.use((req, res, next) => {
     // Only handle WebSocket upgrades that have a sessionId (browser sessions)
     // Let Vite handle its own HMR WebSocket connections
     if (!sessionId) {
-      return; // Let other handlers (like Vite) handle this
+      // Don't interfere with Vite HMR or other WebSocket connections
+      return;
     }
 
     socket.on('error', (error) => {
