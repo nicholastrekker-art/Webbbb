@@ -100,7 +100,10 @@ app.use((req, res, next) => {
     const url = new URL(req.url || '', `http://${req.headers.host}`);
     const browserSessionId = url.searchParams.get('sessionId');
 
+    log(`WebSocket connection attempt for session: ${browserSessionId}`);
+
     if (!browserSessionId) {
+      log('WebSocket rejected: No session ID provided');
       ws.close(1008, 'Session ID required');
       return;
     }
@@ -150,9 +153,24 @@ app.use((req, res, next) => {
         return;
       }
 
-      log(`WebSocket authenticated and connected for browser session ${browserSessionId} (user: ${userId})`);
+      log(`WebSocket authenticated for session ${browserSessionId} (user: ${userId})`);
 
+      // Check if browser session is actually running
+      if (!browserManager.isSessionActive(browserSessionId)) {
+        log(`WebSocket warning: Browser session ${browserSessionId} is not active, attempting to start...`);
+        try {
+          await browserManager.startSession(browserSessionId);
+          log(`Browser session ${browserSessionId} started successfully`);
+        } catch (error) {
+          log(`Failed to start browser session ${browserSessionId}: ${error}`);
+          ws.close(4500, 'Failed to start browser session');
+          return;
+        }
+      }
+
+      log(`Starting screencast for session ${browserSessionId}`);
       await browserManager.startScreencast(browserSessionId, ws);
+      log(`Screencast initialized for session ${browserSessionId}`);
 
       ws.on('message', async (message) => {
         try {

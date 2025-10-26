@@ -484,46 +484,64 @@ export class BrowserSessionManager {
   async startScreencast(sessionId: string, ws: WebSocket): Promise<void> {
     const instance = activeBrowsers.get(sessionId);
     if (!instance) {
+      console.error(`Cannot start screencast: Session ${sessionId} not running`);
       throw new Error("Session not running");
     }
 
+    console.log(`Adding WebSocket client to session ${sessionId}`);
     instance.streamClients.add(ws);
 
     if (!instance.cdpSession) {
-      const cdpSession = await instance.page.createCDPSession();
-      instance.cdpSession = cdpSession;
+      console.log(`Creating CDP session for ${sessionId}`);
+      try {
+        const cdpSession = await instance.page.createCDPSession();
+        instance.cdpSession = cdpSession;
 
-      cdpSession.on('Page.screencastFrame', async (params: any) => {
-        try {
-          await cdpSession.send('Page.screencastFrameAck', { 
-            sessionId: params.sessionId 
-          });
+        cdpSession.on('Page.screencastFrame', async (params: any) => {
+          try {
+            await cdpSession.send('Page.screencastFrameAck', { 
+              sessionId: params.sessionId 
+            });
 
-          const frameData = {
-            type: 'frame',
-            data: params.data,
-            metadata: params.metadata,
-          };
+            const frameData = {
+              type: 'frame',
+              data: params.data,
+              metadata: params.metadata,
+            };
 
-          instance.streamClients.forEach((client) => {
-            if (client.readyState === 1) {
-              client.send(JSON.stringify(frameData));
-            }
-          });
-        } catch (error) {
-          console.error('Error handling screencast frame:', error);
-        }
-      });
+            instance.streamClients.forEach((client) => {
+              if (client.readyState === 1) {
+                try {
+                  client.send(JSON.stringify(frameData));
+                } catch (error) {
+                  console.error('Error sending frame to client:', error);
+                }
+              }
+            });
+          } catch (error) {
+            console.error('Error handling screencast frame:', error);
+          }
+        });
 
-      await cdpSession.send('Page.startScreencast', {
-        format: 'jpeg',
-        quality: 80,
-        maxWidth: instance.page.viewport()?.width || 1920,
-        maxHeight: instance.page.viewport()?.height || 1080,
-        everyNthFrame: 1,
-      });
+        const viewport = instance.page.viewport();
+        console.log(`Starting screencast with viewport ${viewport?.width}x${viewport?.height}`);
+        
+        await cdpSession.send('Page.startScreencast', {
+          format: 'jpeg',
+          quality: 80,
+          maxWidth: viewport?.width || 1920,
+          maxHeight: viewport?.height || 1080,
+          everyNthFrame: 1,
+        });
 
-      console.log(`Started screencast for session ${sessionId}`);
+        console.log(`Screencast started successfully for session ${sessionId}`);
+      } catch (error) {
+        console.error(`Failed to start screencast for session ${sessionId}:`, error);
+        instance.cdpSession = undefined;
+        throw error;
+      }
+    } else {
+      console.log(`CDP session already exists for ${sessionId}, reusing it`);
     }
   }
 
