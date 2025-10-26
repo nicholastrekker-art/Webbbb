@@ -88,8 +88,13 @@ export class BrowserSessionManager {
         await page.setCookie(...puppeteerCookies);
       }
 
-      // Navigate to URL
-      await page.goto(session.url, { waitUntil: "networkidle0", timeout: 30000 });
+      // Navigate to URL if provided
+      if (session.url && session.url.trim() !== "") {
+        await page.goto(session.url, { waitUntil: "networkidle0", timeout: 30000 });
+      } else {
+        // Navigate to blank page if no URL specified
+        await page.goto("about:blank", { waitUntil: "networkidle0", timeout: 30000 });
+      }
 
       // Save cookies back to storage
       await this.saveCookies(sessionId, page);
