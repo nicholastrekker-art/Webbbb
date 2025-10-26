@@ -144,6 +144,11 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
     };
   }, [screenshot]);
 
+  // Function to refresh screenshot
+  const refreshScreenshot = () => {
+    loadScreenshot();
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[90vw] max-h-[90vh] flex flex-col">
@@ -240,7 +245,7 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
                   if (e.key === 'Enter' && e.currentTarget.value) {
                     const text = e.currentTarget.value;
                     e.currentTarget.value = '';
-                    
+
                     try {
                       await apiRequest("POST", `/api/sessions/${session.id}/type`, { text });
                       setTimeout(loadScreenshot, 500);
@@ -319,29 +324,34 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
 
                     const result = await response.json();
 
-                    // Refresh screenshot multiple times to show the upload
-                    setTimeout(loadScreenshot, 500);
-                    setTimeout(loadScreenshot, 1500);
-                    setTimeout(loadScreenshot, 3000);
-
                     toast({
                       title: "File uploaded successfully",
-                      description: `${file.name} has been set in the file input field`,
+                      description: `${file.name} has been uploaded to the file input on the page`,
                     });
 
+                    // Clear the file input
                     e.target.value = '';
+
+                    // Refresh screenshot after upload to show the result
+                    setTimeout(() => {
+                      refreshScreenshot();
+                    }, 1000);
+
                   } catch (error: any) {
                     toast({
                       title: "Upload failed",
-                      description: error.message || "Failed to upload file. Make sure the page has a file input field.",
+                      description: error.message || 'Make sure the page has a file upload field',
                       variant: "destructive",
                     });
+
+                    // Clear the file input even on error
+                    e.target.value = '';
                   }
                 }}
                 data-testid="input-file-upload"
               />
-              <p className="text-xs text-muted-foreground">
-                Select a file to upload to the first file input on the page
+              <p className="text-xs text-muted-foreground col-span-2">
+                Select a file to upload to any file input field on the current page
               </p>
             </div>
           </div>

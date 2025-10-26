@@ -321,8 +321,22 @@ export class BrowserSessionManager {
     });
     console.log('Triggered change events');
 
+    // Try to click any associated labels to better simulate user interaction
+    try {
+      await targetInput.evaluate((el: HTMLInputElement) => {
+        const label = el.closest('label') || document.querySelector(`label[for="${el.id}"]`);
+        if (label) {
+          (label as HTMLElement).click();
+        }
+      });
+    } catch (err) {
+      // Ignore errors here
+    }
+
     // Small delay to let the page process the file
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    console.log('File upload completed successfully');
   }
 
   /**
