@@ -11,8 +11,9 @@ import { MetricsCard } from "@/components/MetricsCard";
 import { CreateSessionDialog } from "@/components/CreateSessionDialog";
 import { CookieViewer } from "@/components/CookieViewer";
 import { BrowserViewer } from "@/components/BrowserViewer";
-import { Activity, Clock, Cookie as CookieIcon } from "lucide-react";
+import { Activity, Clock, Cookie as CookieIcon, Globe, Zap } from "lucide-react";
 import type { BrowserSession, Cookie, InsertBrowserSessionInput } from "@shared/schema";
+import { Button } from "@/components/ui/button";
 
 export default function Home() {
   const { toast } = useToast();
@@ -140,6 +141,18 @@ export default function Home() {
     setSelectedSessionForCookies(session);
   };
 
+  const handleQuickStart = (url: string) => {
+    if (!user) return;
+    const sessionData: InsertBrowserSessionInput = {
+      userId: user.id,
+      url,
+      status: "running",
+      viewportWidth: 1920,
+      viewportHeight: 1080,
+    };
+    createSessionMutation.mutate(sessionData);
+  };
+
   // Calculate metrics
   const activeSessions = sessions.filter((s) => s.status === "running").length;
   const totalSessions = sessions.length;
@@ -200,20 +213,42 @@ export default function Home() {
               </div>
 
               {/* Header with create button */}
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between flex-wrap gap-4">
                 <div>
                   <h2 className="text-lg font-semibold">Browser Sessions</h2>
                   <p className="text-sm text-muted-foreground">
                     Manage your persistent browser automation sessions
                   </p>
                 </div>
-                {user && (
-                  <CreateSessionDialog
-                    userId={user.id}
-                    onSubmit={handleCreateSession}
-                    isPending={createSessionMutation.isPending}
-                  />
-                )}
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => handleQuickStart("https://google.com")}
+                    disabled={createSessionMutation.isPending}
+                    data-testid="button-quickstart-google"
+                    className="gap-2"
+                  >
+                    <Zap className="w-4 h-4" />
+                    Google
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => handleQuickStart("https://deriv.com")}
+                    disabled={createSessionMutation.isPending}
+                    data-testid="button-quickstart-deriv"
+                    className="gap-2"
+                  >
+                    <Zap className="w-4 h-4" />
+                    Deriv
+                  </Button>
+                  {user && (
+                    <CreateSessionDialog
+                      userId={user.id}
+                      onSubmit={handleCreateSession}
+                      isPending={createSessionMutation.isPending}
+                    />
+                  )}
+                </div>
               </div>
 
               {/* Sessions Grid */}
@@ -224,18 +259,41 @@ export default function Home() {
               ) : sessions.length === 0 ? (
                 <div className="text-center py-12 border rounded-lg">
                   <div className="w-16 h-16 rounded-md bg-muted flex items-center justify-center mx-auto mb-4">
-                    <Activity className="w-8 h-8 text-muted-foreground" />
+                    <Globe className="w-8 h-8 text-muted-foreground" />
                   </div>
                   <h3 className="text-lg font-semibold mb-2">No active sessions</h3>
                   <p className="text-sm text-muted-foreground mb-6">
-                    Create your first browser session to get started
+                    Create your first browser session to get started with automation
                   </p>
+                  <div className="flex items-center justify-center gap-3 mb-4">
+                    <Button
+                      onClick={() => handleQuickStart("https://google.com")}
+                      disabled={createSessionMutation.isPending}
+                      data-testid="button-quickstart-google-empty"
+                      className="gap-2"
+                    >
+                      <Zap className="w-4 h-4" />
+                      Start with Google
+                    </Button>
+                    <Button
+                      onClick={() => handleQuickStart("https://deriv.com")}
+                      disabled={createSessionMutation.isPending}
+                      data-testid="button-quickstart-deriv-empty"
+                      className="gap-2"
+                    >
+                      <Zap className="w-4 h-4" />
+                      Start with Deriv
+                    </Button>
+                  </div>
                   {user && (
-                    <CreateSessionDialog
-                      userId={user.id}
-                      onSubmit={handleCreateSession}
-                      isPending={createSessionMutation.isPending}
-                    />
+                    <div className="mt-2">
+                      <p className="text-xs text-muted-foreground mb-2">Or create a custom session:</p>
+                      <CreateSessionDialog
+                        userId={user.id}
+                        onSubmit={handleCreateSession}
+                        isPending={createSessionMutation.isPending}
+                      />
+                    </div>
                   )}
                 </div>
               ) : (
