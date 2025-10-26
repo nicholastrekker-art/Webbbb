@@ -1,7 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
-import { WebSocketServer } from "ws";
+import { WebSocketServer, WebSocket } from "ws";
 import { browserManager } from "./browserManager";
 import { getSession } from "./auth";
 import { storage } from "./storage";
@@ -107,7 +107,8 @@ app.use((req, res, next) => {
 
       if (!browserSessionId) {
         log('WebSocket rejected: No session ID provided');
-        ws.close(1008, 'Session ID required');
+        // Use terminate() to avoid invalid close codes from client
+        ws.terminate();
         return;
       }
 
@@ -129,14 +130,14 @@ app.use((req, res, next) => {
       // Verify user is authenticated
       if (!req.isAuthenticated || !req.isAuthenticated()) {
         log(`WebSocket auth failed: User not authenticated`);
-        ws.close(1008, 'Authentication required');
+        ws.terminate();
         return;
       }
 
       const userId = req.user?.id;
       if (!userId) {
         log(`WebSocket auth failed: No user ID`);
-        ws.close(1008, 'Authentication required');
+        ws.terminate();
         return;
       }
 
@@ -144,14 +145,14 @@ app.use((req, res, next) => {
       const browserSession = await storage.getBrowserSession(browserSessionId);
       if (!browserSession) {
         log(`WebSocket auth failed: Browser session not found`);
-        ws.close(1008, 'Permission denied');
+        ws.terminate();
         return;
       }
 
       // Verify ownership: the authenticated user must own the browser session
       if (browserSession.userId !== userId) {
         log(`WebSocket auth failed: User ${userId} does not own browser session ${browserSessionId}`);
-        ws.close(1008, 'Permission denied');
+        ws.terminate();
         return;
       }
 
@@ -165,7 +166,7 @@ app.use((req, res, next) => {
           log(`Browser session ${browserSessionId} started successfully`);
         } catch (error) {
           log(`Failed to start browser session ${browserSessionId}: ${error}`);
-          ws.close(1011, 'Failed to start browser session');
+          ws.terminate();
           return;
         }
       }
@@ -214,18 +215,19 @@ app.use((req, res, next) => {
 
       ws.on('error', (error) => {
         console.error('WebSocket client error:', error);
+        // Don't let client errors crash the server
       });
     } catch (error) {
       log(`WebSocket connection error: ${error}`);
-      // Only try to close if the WebSocket is in a valid state
+      // Safely terminate the connection without throwing
       try {
-        if (ws.readyState === 1) { // OPEN state
-          ws.close(1011, 'Internal server error');
-        } else if (ws.readyState === 0) { // CONNECTING state
-          ws.close(1000, 'Normal closure');
+        // Only close if socket is open or connecting
+        if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+          ws.terminate(); // Force close without waiting for close frame
         }
       } catch (closeError) {
-        // Ignore errors when closing - connection may already be terminated
+        // Ignore all close errors
+        log(`Error during WebSocket termination: ${closeError}`);
       }
     }
   });
@@ -241,6 +243,14 @@ app.use((req, res, next) => {
     socket.on('error', (error) => {
       console.error('WebSocket upgrade error:', error);
       // Don't crash on upgrade errors
+    });
+
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      ws.on('error', (error) => {
+        console.error('WebSocket client error during upgrade:', error);
+        // Prevent crash on client errors
+      });
+      wss.emit('connection', ws, request);
     });
   });
 
