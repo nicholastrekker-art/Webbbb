@@ -282,6 +282,53 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
                 Enter ↵
               </Button>
             </div>
+
+            {/* File Upload */}
+            <div className="flex items-center gap-2 pt-2 border-t">
+              <Label htmlFor="file-upload" className="text-sm font-medium whitespace-nowrap">
+                Upload:
+              </Label>
+              <Input
+                id="file-upload"
+                type="file"
+                className="flex-1"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+
+                  const formData = new FormData();
+                  formData.append('file', file);
+
+                  try {
+                    const response = await fetch(`/api/sessions/${session.id}/upload`, {
+                      method: 'POST',
+                      credentials: 'include',
+                      body: formData,
+                    });
+
+                    if (!response.ok) {
+                      const data = await response.json();
+                      throw new Error(data.message || 'Upload failed');
+                    }
+
+                    setTimeout(loadScreenshot, 1000);
+                    toast({
+                      title: "File uploaded",
+                      description: `Uploaded: ${file.name}`,
+                    });
+
+                    e.target.value = '';
+                  } catch (error: any) {
+                    toast({
+                      title: "Error",
+                      description: error.message || "Failed to upload file",
+                      variant: "destructive",
+                    });
+                  }
+                }}
+                data-testid="input-file-upload"
+              />
+            </div>
           </div>
         )}
       </DialogContent>

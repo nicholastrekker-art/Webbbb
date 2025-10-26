@@ -260,6 +260,26 @@ export class BrowserSessionManager {
   }
 
   /**
+   * Upload file to active session
+   */
+  async uploadFile(sessionId: string, filePath: string): Promise<void> {
+    const instance = activeBrowsers.get(sessionId);
+    if (!instance) {
+      throw new Error("Session not running");
+    }
+
+    // Find all file input elements on the page
+    const fileInputs = await instance.page.$$('input[type="file"]');
+    
+    if (fileInputs.length === 0) {
+      throw new Error("No file input found on page");
+    }
+
+    // Upload to the first visible file input
+    await fileInputs[0].uploadFile(filePath);
+  }
+
+  /**
    * Get current URL of active session
    */
   async getCurrentUrl(sessionId: string): Promise<string> {

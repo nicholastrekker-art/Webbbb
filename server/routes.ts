@@ -5,6 +5,23 @@ import { setupAuth, isAuthenticated } from "./auth";
 import { browserManager } from "./browserManager";
 import { insertBrowserSessionSchema } from "@shared/schema";
 import type { InsertBrowserSessionInput } from "@shared/schema";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
+
+// Configure multer for file uploads
+const upload = multer({
+  dest: path.join(process.cwd(), 'uploads'),
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB limit
+  },
+});
+
+// Ensure uploads directory exists
+const uploadsDir = path.join(process.cwd(), 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Auth middleware
@@ -275,6 +292,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error typing:", error);
       res.status(500).json({ message: "Failed to type" });
+    }
+  });
+
+  app.post("/api/sessions/:id/upload", isAuthenticated, upload.single('file'), async (req: any, res) => {
+    try {
+      const { id } = req.params;
+
+      if (!req.file) {
+        return res.status(400).json({ message: "No file uploaded" });
+      }
+
+      const session = await storage.getBrowserSession(id);
+      if (!session) {
+        // Clean up uploaded file
+        fs.unlinkSync(req.file.path);
+        return res.status(404).json({ message: "Session not found" });
+      }
+
+      // Verify ownership
+      const userId = req.user.id;
+      if (session.userId !== userId) {
+        // Clean up uploaded file
+        fs.unlinkSync(req.file.path);
+        return res.status(403).json({ message: "Forbidden" });
+      }
+
+      if (!browserManager.isSessionActive(id)) {
+        // Clean up uploaded file
+        fs.unlinkSync(req.file.path);
+        return res.status(400).json({ message: "Session not running" });
+      }
+
+      await browserManager.uploadFile(id, req.file.path);
+
+      // Clean up uploaded file after upload
+      setTimeout(() => {
+        try {
+          fs.unlinkSync(req.file.path);
+        } catch (error) {
+          console.error("Error cleaning up file:", error);
+        }
+      }, 5000);
+
+      res.json({ success: true, filename: req.file.originalname });
+    } catch (error) {
+      console.error("Error uploading file:", error);
+      // Clean up uploaded file on error
+      if (req.file) {
+        try {
+          fs.unlinkSync(req.file.path);
+        } catch (err) {
+          console.error("Error cleaning up file:", err);
+        }
+      }
+      res.status(500).json({ message: error instanceof Error ? error.message : "Failed to upload file" });
     }
   });
 
