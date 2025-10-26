@@ -103,14 +103,13 @@ app.use((req, res, next) => {
       const url = new URL(req.url || '', `http://${req.headers.host}`);
       browserSessionId = url.searchParams.get('sessionId');
 
-      log(`WebSocket connection attempt for session: ${browserSessionId}`);
-
+      // Silently ignore WebSocket connections without sessionId (e.g., Vite HMR)
       if (!browserSessionId) {
-        log('WebSocket rejected: No session ID provided');
-        // Use terminate() to avoid invalid close codes from client
         ws.terminate();
         return;
       }
+
+      log(`WebSocket connection attempt for browser session: ${browserSessionId}`);
 
       // Create a mock response object for middleware
       const res: any = {
