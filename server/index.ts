@@ -217,13 +217,15 @@ app.use((req, res, next) => {
       });
     } catch (error) {
       log(`WebSocket connection error: ${error}`);
-      // Use a valid close code (1011 = Internal Error)
-      if (ws.readyState === ws.OPEN || ws.readyState === ws.CONNECTING) {
-        try {
-          ws.close(1011);
-        } catch (closeError) {
-          // Ignore errors when closing
+      // Only try to close if the WebSocket is in a valid state
+      try {
+        if (ws.readyState === 1) { // OPEN state
+          ws.close(1011, 'Internal server error');
+        } else if (ws.readyState === 0) { // CONNECTING state
+          ws.close(1000, 'Normal closure');
         }
+      } catch (closeError) {
+        // Ignore errors when closing - connection may already be terminated
       }
     }
   });
