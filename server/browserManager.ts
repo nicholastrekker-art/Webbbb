@@ -268,9 +268,12 @@ export class BrowserSessionManager {
       throw new Error("Session not running");
     }
 
-    // Wait for file input to be available on the page
     try {
-      await instance.page.waitForSelector('input[type="file"]', { timeout: 5000 });
+      // Wait for file input to be available on the page
+      await instance.page.waitForSelector('input[type="file"]', { 
+        timeout: 5000,
+        visible: false // Don't require it to be visible since some inputs are hidden
+      });
     } catch (error) {
       throw new Error("No file input found on page. Please navigate to a page with a file upload field.");
     }
@@ -282,31 +285,41 @@ export class BrowserSessionManager {
       throw new Error("No file input found on page");
     }
 
-    // Find the first visible and enabled file input
-    let targetInput = null;
+    console.log(`Found ${fileInputs.length} file input(s) on page`);
+
+    // Find the first visible and enabled file input, or just use the first one
+    let targetInput = fileInputs[0]; // Default to first input
+    
     for (const input of fileInputs) {
-      const isVisible = await input.isVisible();
-      const isEnabled = await input.evaluate((el: HTMLInputElement) => !el.disabled);
-      
-      if (isVisible && isEnabled) {
-        targetInput = input;
-        break;
+      try {
+        const isVisible = await input.isVisible();
+        const isEnabled = await input.evaluate((el: HTMLInputElement) => !el.disabled);
+        
+        if (isVisible && isEnabled) {
+          targetInput = input;
+          console.log('Found visible and enabled file input');
+          break;
+        }
+      } catch (err) {
+        console.log('Error checking input visibility:', err);
+        // Continue to next input
       }
     }
 
-    if (!targetInput) {
-      // If no visible input, use the first one anyway
-      targetInput = fileInputs[0];
-    }
-
     // Upload the file
+    console.log(`Uploading file: ${filePath}`);
     await targetInput.uploadFile(filePath);
+    console.log('File uploaded to input element');
 
-    // Trigger change event to ensure the page recognizes the upload
+    // Trigger change and input events to ensure the page recognizes the upload
     await targetInput.evaluate((el: HTMLInputElement) => {
-      const event = new Event('change', { bubbles: true });
-      el.dispatchEvent(event);
+      // Trigger both change and input events for compatibility
+      const changeEvent = new Event('change', { bubbles: true });
+      const inputEvent = new Event('input', { bubbles: true });
+      el.dispatchEvent(inputEvent);
+      el.dispatchEvent(changeEvent);
     });
+    console.log('Triggered change events');
 
     // Small delay to let the page process the file
     await new Promise(resolve => setTimeout(resolve, 500));
