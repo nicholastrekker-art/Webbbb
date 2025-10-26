@@ -97,16 +97,17 @@ app.use((req, res, next) => {
   const wss = new WebSocketServer({ server });
 
   wss.on('connection', async (ws, req: any) => {
-    const url = new URL(req.url || '', `http://${req.headers.host}`);
-    const browserSessionId = url.searchParams.get('sessionId');
+    try {
+      const url = new URL(req.url || '', `http://${req.headers.host}`);
+      const browserSessionId = url.searchParams.get('sessionId');
 
-    log(`WebSocket connection attempt for session: ${browserSessionId}`);
+      log(`WebSocket connection attempt for session: ${browserSessionId}`);
 
-    if (!browserSessionId) {
-      log('WebSocket rejected: No session ID provided');
-      ws.close(1008, 'Session ID required');
-      return;
-    }
+      if (!browserSessionId) {
+        log('WebSocket rejected: No session ID provided');
+        ws.close(1008, 'Session ID required');
+        return;
+      }
 
     // Create a mock response object for middleware
     const res: any = {
@@ -210,11 +211,26 @@ app.use((req, res, next) => {
 
       ws.on('error', (error) => {
         console.error('WebSocket error:', error);
+        // Don't crash the server on WebSocket errors
+        try {
+          ws.close();
+        } catch (closeError) {
+          // Ignore errors when closing
+        }
       });
     } catch (error) {
       log(`WebSocket auth error: ${error}`);
-      ws.close(4403, 'Authentication required');
+      try {
+        ws.close(4403, 'Authentication required');
+      } catch (closeError) {
+        // Ignore errors when closing
+      }
     }
+  });
+
+  // Handle WebSocket server errors
+  wss.on('error', (error) => {
+    console.error('WebSocket server error:', error);
   });
 
   // ALWAYS serve the app on the port specified in the environment variable PORT

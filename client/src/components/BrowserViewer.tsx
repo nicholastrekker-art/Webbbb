@@ -27,70 +27,77 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
   const [isLoading, setIsLoading] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}?sessionId=${session.id}`;
+  const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}`;
 
   useEffect(() => {
-    if (!open || session.status !== "running") {
+    // Only connect if dialog is open, session is running, and we have a valid session ID
+    if (!open || session.status !== "running" || !session.id) {
+      setIsConnected(false);
       if (wsRef.current) {
         wsRef.current.close();
         wsRef.current = null;
       }
-      setIsConnected(false);
       return;
     }
 
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
+    // Add a small delay to ensure the session is fully ready
+    const connectTimeout = setTimeout(() => {
+      const ws = new WebSocket(`${wsUrl}?sessionId=${session.id}`);
+      wsRef.current = ws;
 
-    ws.onopen = () => {
-      console.log('WebSocket connected');
-      setIsConnected(true);
-    };
+      ws.onopen = () => {
+        console.log('WebSocket connected');
+        setIsConnected(true);
+      };
 
-    ws.onmessage = (event) => {
-      try {
-        const message = JSON.parse(event.data);
-        
-        if (message.type === 'frame' && canvasRef.current) {
-          const canvas = canvasRef.current;
-          const ctx = canvas.getContext('2d');
-          if (!ctx) return;
+      ws.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data);
+          if (message.type === 'frame' && canvasRef.current) {
+            const canvas = canvasRef.current;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return;
 
-          const img = new Image();
-          img.onload = () => {
-            canvas.width = session.viewportWidth || 1920;
-            canvas.height = session.viewportHeight || 1080;
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-          };
-          img.src = `data:image/jpeg;base64,${message.data}`;
+            const img = new Image();
+            img.onload = () => {
+              canvas.width = session.viewportWidth || 1920;
+              canvas.height = session.viewportHeight || 1080;
+              ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            };
+            img.src = `data:image/jpeg;base64,${message.data}`;
+          }
+        } catch (error) {
+          console.error('Error handling WebSocket message:', error);
         }
-      } catch (error) {
-        console.error('Error handling WebSocket message:', error);
-      }
-    };
+      };
 
-    ws.onerror = (error) => {
-      console.error('WebSocket error:', error);
-      toast({
-        title: "Connection Error",
-        description: "Failed to connect to browser stream",
-        variant: "destructive",
-      });
-    };
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        toast({
+          title: "Connection Error",
+          description: "Failed to connect to browser stream",
+          variant: "destructive",
+        });
+      };
 
-    ws.onclose = () => {
-      console.log('WebSocket disconnected');
-      setIsConnected(false);
-    };
+      ws.onclose = () => {
+        console.log('WebSocket disconnected');
+        setIsConnected(false);
+      };
+    }, 100);
 
     return () => {
-      ws.close();
+      clearTimeout(connectTimeout);
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
     };
   }, [open, session.status, session.id, session.viewportWidth, session.viewportHeight, wsUrl, toast]);
 
@@ -191,7 +198,7 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     e.preventDefault();
-    
+
     let key = e.key;
     if (key === ' ') key = 'Space';
     else if (key === 'Enter') key = 'Enter';
@@ -209,7 +216,7 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
 
   const handleKeyUp = (e: React.KeyboardEvent) => {
     e.preventDefault();
-    
+
     let key = e.key;
     if (key === ' ') key = 'Space';
     else if (key === 'Enter') key = 'Enter';
@@ -233,12 +240,12 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
 
     try {
       await apiRequest("POST", `/api/sessions/${session.id}/upload`, formData);
-      
+
       toast({
         title: "Success",
         description: "File uploaded successfully",
       });
-      
+
       setSelectedFile(null);
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
@@ -350,7 +357,7 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
             >
               <Home className="w-4 h-4" />
             </Button>
-            
+
             <div className="flex-1 flex items-center gap-2">
               <Input
                 type="text"
