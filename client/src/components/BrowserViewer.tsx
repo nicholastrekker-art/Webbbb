@@ -205,10 +205,8 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
     const y = (e.clientY - rect.top) * scaleY;
 
     console.log(`Click coordinates: raw=(${e.clientX - rect.left}, ${e.clientY - rect.top}), scaled=(${x}, ${y})`);
-
     sendMouseEvent('mousePressed', x, y);
-    setTimeout(() => sendMouseEvent('mouseReleased', x, y), 10);
-
+    setTimeout(() => sendMouseEvent('mouseReleased', x, y), 100);
     dialogContentRef.current?.focus();
   };
 
@@ -388,7 +386,7 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent 
+      <DialogContent
         ref={dialogContentRef}
         className="max-w-[95vw] w-full h-[95vh] flex flex-col p-0 focus:outline-none"
         data-testid="browser-viewer-dialog"
@@ -495,13 +493,13 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
 
           {!isConnected && (
             <div className="bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 p-3 rounded-md text-sm">
-              {session.status !== "running" 
+              {session.status !== "running"
                 ? "Session is not running. Start the session to view the browser."
                 : "Connecting to browser stream..."}
             </div>
           )}
 
-          <div 
+          <div
             ref={containerRef}
             className="flex-1 border rounded-md overflow-hidden bg-gray-100 dark:bg-gray-900 relative"
             style={{ minHeight: 0 }}
@@ -531,7 +529,7 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
           </div>
 
           <div className="text-xs text-muted-foreground">
-            <strong>Tip:</strong> Click on the canvas to interact with the browser. 
+            <strong>Tip:</strong> Click on the canvas to interact with the browser.
             Type anywhere to send keyboard input. Use the mouse wheel to scroll.
           </div>
         </div>
