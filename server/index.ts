@@ -213,8 +213,11 @@ app.use((req, res, next) => {
               data.deltaY
             );
           }
-        } catch (error) {
-          log(`WebSocket message error: ${error}`);
+        } catch (error: any) {
+          // Don't log session closed errors repeatedly
+          if (!error.message || !error.message.includes('Session closed')) {
+            log(`WebSocket message error: ${error}`);
+          }
         }
       });
 

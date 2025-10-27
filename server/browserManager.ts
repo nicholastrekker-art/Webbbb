@@ -582,6 +582,12 @@ export class BrowserSessionManager {
     console.log(`Dispatching mouse event: ${type} at (${roundedX}, ${roundedY}), button: ${mouseButton}`);
 
     try {
+      // Check if page is still alive
+      if (instance.page.isClosed()) {
+        console.log(`Page is closed, ignoring mouse event`);
+        return;
+      }
+
       if (type === 'mouseMoved') {
         await instance.page.mouse.move(roundedX, roundedY);
       } else if (type === 'mousePressed') {
@@ -592,7 +598,12 @@ export class BrowserSessionManager {
       }
 
       await this.saveCookies(sessionId, instance.page);
-    } catch (error) {
+    } catch (error: any) {
+      // Silently ignore errors from closed pages
+      if (error.message && error.message.includes('Session closed')) {
+        console.log(`Page session closed, ignoring mouse event`);
+        return;
+      }
       console.error(`Error dispatching mouse event: ${error}`);
       throw error;
     }
@@ -610,6 +621,12 @@ export class BrowserSessionManager {
     console.log(`Dispatching key event: ${type}, key: ${key}, text: ${text || 'none'}`);
 
     try {
+      // Check if page is still alive
+      if (instance.page.isClosed()) {
+        console.log(`Page is closed, ignoring key event`);
+        return;
+      }
+
       if (type === 'keyDown') {
         await instance.page.keyboard.down(key as any);
         if (text) {
@@ -618,7 +635,12 @@ export class BrowserSessionManager {
       } else if (type === 'keyUp') {
         await instance.page.keyboard.up(key as any);
       }
-    } catch (error) {
+    } catch (error: any) {
+      // Silently ignore errors from closed pages
+      if (error.message && error.message.includes('Session closed')) {
+        console.log(`Page session closed, ignoring key event`);
+        return;
+      }
       console.error(`Error dispatching key event: ${error}`);
       throw error;
     }
@@ -633,9 +655,25 @@ export class BrowserSessionManager {
       throw new Error("Session not running");
     }
 
-    await instance.page.evaluate((dx, dy) => {
-      window.scrollBy(dx, dy);
-    }, deltaX, deltaY);
+    try {
+      // Check if page is still alive
+      if (instance.page.isClosed()) {
+        console.log(`Page is closed, ignoring scroll event`);
+        return;
+      }
+
+      await instance.page.evaluate((dx, dy) => {
+        window.scrollBy(dx, dy);
+      }, deltaX, deltaY);
+    } catch (error: any) {
+      // Silently ignore errors from closed pages
+      if (error.message && error.message.includes('Session closed')) {
+        console.log(`Page session closed, ignoring scroll event`);
+        return;
+      }
+      console.error(`Error dispatching scroll event: ${error}`);
+      throw error;
+    }
   }
 }
 
