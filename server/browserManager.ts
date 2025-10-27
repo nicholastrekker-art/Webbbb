@@ -16,6 +16,7 @@ const activeBrowsers = new Map<string, {
   page: Page; 
   cdpSession?: CDPSession;
   streamClients: Set<WebSocket>;
+  mouseButtonPressed: boolean;
 }>();
 
 export class BrowserSessionManager {
@@ -106,7 +107,7 @@ export class BrowserSessionManager {
       await this.saveCookies(sessionId, page);
 
       // Store browser and page instance
-      activeBrowsers.set(sessionId, { browser, page, streamClients: new Set() });
+      activeBrowsers.set(sessionId, { browser, page, streamClients: new Set(), mouseButtonPressed: false });
 
       // Update session status
       await storage.updateBrowserSession(sessionId, {
@@ -591,10 +592,22 @@ export class BrowserSessionManager {
       if (type === 'mouseMoved') {
         await instance.page.mouse.move(roundedX, roundedY);
       } else if (type === 'mousePressed') {
-        await instance.page.mouse.move(roundedX, roundedY);
-        await instance.page.mouse.down({ button: mouseButton as any });
+        // Only press if not already pressed
+        if (!instance.mouseButtonPressed) {
+          await instance.page.mouse.move(roundedX, roundedY);
+          await instance.page.mouse.down({ button: mouseButton as any });
+          instance.mouseButtonPressed = true;
+        } else {
+          console.log('Mouse button already pressed, skipping mousePressed event');
+        }
       } else if (type === 'mouseReleased') {
-        await instance.page.mouse.up({ button: mouseButton as any });
+        // Only release if currently pressed
+        if (instance.mouseButtonPressed) {
+          await instance.page.mouse.up({ button: mouseButton as any });
+          instance.mouseButtonPressed = false;
+        } else {
+          console.log('Mouse button not pressed, skipping mouseReleased event');
+        }
       }
 
       await this.saveCookies(sessionId, instance.page);
