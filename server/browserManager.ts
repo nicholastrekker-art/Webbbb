@@ -575,13 +575,18 @@ export class BrowserSessionManager {
       throw new Error("Session not streaming");
     }
 
-    await instance.cdpSession.send('Input.dispatchMouseEvent', {
+    const mouseButton = button || 'left';
+    const params: any = {
       type,
-      x,
-      y,
-      button: button || 'left',
-      clickCount: type === 'mousePressed' ? 1 : undefined,
-    } as any);
+      x: Math.round(x),
+      y: Math.round(y),
+      button: type === 'mouseMoved' ? 'none' : mouseButton,
+      clickCount: type === 'mousePressed' ? 1 : 0,
+    };
+
+    console.log(`Dispatching mouse event: ${type} at (${params.x}, ${params.y}), button: ${params.button}`);
+
+    await instance.cdpSession.send('Input.dispatchMouseEvent', params);
 
     await this.saveCookies(sessionId, instance.page);
   }
@@ -595,11 +600,24 @@ export class BrowserSessionManager {
       throw new Error("Session not streaming");
     }
 
-    await instance.cdpSession.send('Input.dispatchKeyEvent', {
+    const params: any = {
       type,
-      key,
-      text,
-    } as any);
+    };
+
+    if (type === 'keyDown' || type === 'rawKeyDown') {
+      params.key = key;
+      if (text) {
+        params.text = text;
+      }
+    } else if (type === 'keyUp') {
+      params.key = key;
+    } else if (type === 'char') {
+      params.text = text || key;
+    }
+
+    console.log(`Dispatching key event: ${type}, key: ${key}, text: ${text || 'none'}`);
+
+    await instance.cdpSession.send('Input.dispatchKeyEvent', params);
   }
 
   /**

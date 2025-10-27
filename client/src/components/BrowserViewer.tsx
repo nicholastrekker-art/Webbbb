@@ -32,6 +32,7 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
   const wsRef = useRef<WebSocket | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const dialogContentRef = useRef<HTMLDivElement>(null);
 
   // Determine WebSocket URL based on environment
   const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -195,7 +196,9 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
     const y = (e.clientY - rect.top) * scaleY;
 
     sendMouseEvent('mousePressed', x, y);
-    sendMouseEvent('mouseReleased', x, y);
+    setTimeout(() => sendMouseEvent('mouseReleased', x, y), 10);
+
+    dialogContentRef.current?.focus();
   };
 
   const handleCanvasMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -319,10 +322,17 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
     }
   };
 
+  useEffect(() => {
+    if (open && isConnected) {
+      dialogContentRef.current?.focus();
+    }
+  }, [open, isConnected]);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent 
-        className="max-w-[95vw] w-full h-[95vh] flex flex-col p-0"
+        ref={dialogContentRef}
+        className="max-w-[95vw] w-full h-[95vh] flex flex-col p-0 focus:outline-none"
         data-testid="browser-viewer-dialog"
         onKeyDown={handleKeyDown}
         onKeyUp={handleKeyUp}

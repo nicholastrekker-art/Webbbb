@@ -148,7 +148,7 @@ app.use((req, res, next) => {
       // If not found, try fetching all sessions and find it (workaround for timing issues)
       if (!browserSession) {
         const allSessions = await storage.getBrowserSessionsByUserId(userId);
-        browserSession = allSessions.find(s => s.id === browserSessionId) || null;
+        browserSession = allSessions.find(s => s.id === browserSessionId);
       }
       
       if (!browserSession) {
