@@ -143,9 +143,16 @@ app.use((req, res, next) => {
       }
 
       // Verify the browser session exists and check ownership
-      const browserSession = await storage.getBrowserSession(browserSessionId);
+      let browserSession = await storage.getBrowserSession(browserSessionId);
+      
+      // If not found, try fetching all sessions and find it (workaround for timing issues)
       if (!browserSession) {
-        log(`WebSocket auth failed: Browser session not found`);
+        const allSessions = await storage.getBrowserSessionsByUserId(userId);
+        browserSession = allSessions.find(s => s.id === browserSessionId) || null;
+      }
+      
+      if (!browserSession) {
+        log(`WebSocket auth failed: Browser session not found for ID ${browserSessionId}`);
         ws.terminate();
         return;
       }

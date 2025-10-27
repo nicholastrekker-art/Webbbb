@@ -35,7 +35,7 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
 
   // Determine WebSocket URL based on environment
   const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const wsUrl = `${wsProtocol}//${window.location.host}?sessionId=${session.id}`;
+  const wsUrl = `${wsProtocol}//${window.location.host}`;
 
   useEffect(() => {
     // Only connect if dialog is open, session is running, and we have a valid session ID

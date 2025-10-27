@@ -56,6 +56,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const session = await storage.createBrowserSession(validationResult.data);
       
+      // Small delay to ensure database write is fully committed
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
       // Optionally auto-start the session
       if (validationResult.data.status === "running") {
         try {
@@ -64,6 +67,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.error("Failed to start session:", error);
           // Don't fail the request, just log the error
         }
+      }
+      
+      // Verify session is retrievable before returning
+      const verifySession = await storage.getBrowserSession(session.id);
+      if (!verifySession) {
+        console.error("Warning: Session created but not immediately retrievable");
       }
       
       res.json(session);
