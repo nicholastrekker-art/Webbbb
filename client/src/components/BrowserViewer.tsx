@@ -230,6 +230,53 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
     sendScrollEvent(e.deltaX, e.deltaY);
   };
 
+  const handleTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    if (!canvasRef.current || !isConnected) return;
+
+    const touch = e.touches[0];
+    const rect = canvasRef.current.getBoundingClientRect();
+    const scaleX = (session.viewportWidth || 1920) / rect.width;
+    const scaleY = (session.viewportHeight || 1080) / rect.height;
+
+    const x = (touch.clientX - rect.left) * scaleX;
+    const y = (touch.clientY - rect.top) * scaleY;
+
+    console.log(`Touch start at: (${x}, ${y})`);
+    sendMouseEvent('mousePressed', x, y);
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    if (!canvasRef.current || !isConnected) return;
+
+    const touch = e.changedTouches[0];
+    const rect = canvasRef.current.getBoundingClientRect();
+    const scaleX = (session.viewportWidth || 1920) / rect.width;
+    const scaleY = (session.viewportHeight || 1080) / rect.height;
+
+    const x = (touch.clientX - rect.left) * scaleX;
+    const y = (touch.clientY - rect.top) * scaleY;
+
+    console.log(`Touch end at: (${x}, ${y})`);
+    sendMouseEvent('mouseReleased', x, y);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    if (!canvasRef.current || !isConnected) return;
+
+    const touch = e.touches[0];
+    const rect = canvasRef.current.getBoundingClientRect();
+    const scaleX = (session.viewportWidth || 1920) / rect.width;
+    const scaleY = (session.viewportHeight || 1080) / rect.height;
+
+    const x = (touch.clientX - rect.left) * scaleX;
+    const y = (touch.clientY - rect.top) * scaleY;
+
+    sendMouseEvent('mouseMoved', x, y);
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     e.preventDefault();
 
@@ -464,7 +511,10 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
               onClick={handleCanvasClick}
               onMouseMove={handleCanvasMouseMove}
               onWheel={handleCanvasWheel}
-              className="w-full h-full object-contain cursor-pointer"
+              onTouchStart={handleTouchStart}
+              onTouchEnd={handleTouchEnd}
+              onTouchMove={handleTouchMove}
+              className="w-full h-full object-contain cursor-pointer touch-none"
               style={{ imageRendering: 'auto' }}
               data-testid="canvas-browser"
             />
