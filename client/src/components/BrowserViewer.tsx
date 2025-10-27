@@ -404,21 +404,21 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         ref={dialogContentRef}
-        className="max-w-[95vw] w-full h-[95vh] flex flex-col p-0 focus:outline-none"
+        className="max-w-full w-full h-full max-h-full flex flex-col p-0 focus:outline-none m-0 sm:max-w-[95vw] sm:h-[95vh] sm:m-6"
         data-testid="browser-viewer-dialog"
         onKeyDown={handleKeyDown}
         onKeyUp={handleKeyUp}
         tabIndex={0}
       >
-        <DialogHeader className="px-6 pt-6 pb-4">
-          <DialogTitle className="text-2xl font-semibold">Live Browser Session</DialogTitle>
-          <DialogDescription>
+        <DialogHeader className="px-2 sm:px-6 pt-2 sm:pt-6 pb-2 sm:pb-4">
+          <DialogTitle className="text-lg sm:text-2xl font-semibold">Live Browser Session</DialogTitle>
+          <DialogDescription className="text-xs sm:text-sm">
             Interact with the browser in real-time - click, type, scroll, and navigate
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 flex flex-col px-6 pb-6 gap-4 overflow-hidden">
-          <div className="flex items-center gap-2">
+        <div className="flex-1 flex flex-col px-2 sm:px-6 pb-2 sm:pb-6 gap-2 sm:gap-4 overflow-hidden">
+          <div className="flex items-center gap-1 sm:gap-2 flex-wrap">
             <Button
               size="icon"
               variant="outline"
@@ -460,7 +460,7 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
               <Home className="w-4 h-4" />
             </Button>
 
-            <div className="flex-1 flex items-center gap-2">
+            <div className="flex-1 flex items-center gap-1 sm:gap-2 w-full sm:w-auto">
               <Input
                 type="text"
                 value={urlInput}
@@ -472,7 +472,7 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
                   }
                 }}
                 placeholder="https://example.com"
-                className="font-mono text-sm"
+                className="font-mono text-xs sm:text-sm"
                 disabled={!isConnected}
                 data-testid="input-url"
               />
@@ -480,13 +480,15 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
                 onClick={() => handleNavigate()}
                 disabled={isLoading || !isConnected}
                 data-testid="button-navigate"
+                size="sm"
+                className="shrink-0"
               >
                 Go
               </Button>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="hidden sm:flex items-center gap-2">
             <input
               ref={fileInputRef}
               type="file"
@@ -517,7 +519,7 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
 
           <div
             ref={containerRef}
-            className="flex-1 border rounded-md overflow-hidden bg-gray-100 dark:bg-gray-900 relative"
+            className="flex-1 border rounded-md overflow-auto bg-gray-100 dark:bg-gray-900 relative"
             style={{ minHeight: 0 }}
           >
             <canvas
@@ -528,8 +530,14 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
               onTouchStart={handleTouchStart}
               onTouchEnd={handleTouchEnd}
               onTouchMove={handleTouchMove}
-              className="w-full h-full object-contain cursor-pointer touch-none"
-              style={{ imageRendering: 'auto' }}
+              className="cursor-pointer touch-none block"
+              style={{ 
+                imageRendering: 'auto',
+                width: 'auto',
+                height: 'auto',
+                maxWidth: '100%',
+                maxHeight: '100%'
+              }}
               data-testid="canvas-browser"
             />
             {!isConnected && (
@@ -544,7 +552,7 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
             )}
           </div>
 
-          <div className="text-xs text-muted-foreground">
+          <div className="text-xs text-muted-foreground hidden sm:block">
             <strong>Tip:</strong> Click on the canvas to interact with the browser.
             Type anywhere to send keyboard input. Use the mouse wheel to scroll.
           </div>
