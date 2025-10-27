@@ -571,24 +571,31 @@ export class BrowserSessionManager {
    */
   async dispatchMouseEvent(sessionId: string, type: string, x: number, y: number, button?: string): Promise<void> {
     const instance = activeBrowsers.get(sessionId);
-    if (!instance?.cdpSession) {
-      throw new Error("Session not streaming");
+    if (!instance?.page) {
+      throw new Error("Session not running");
     }
 
+    const roundedX = Math.round(x);
+    const roundedY = Math.round(y);
     const mouseButton = button || 'left';
-    const params: any = {
-      type,
-      x: Math.round(x),
-      y: Math.round(y),
-      button: type === 'mouseMoved' ? 'none' : mouseButton,
-      clickCount: type === 'mousePressed' ? 1 : 0,
-    };
 
-    console.log(`Dispatching mouse event: ${type} at (${params.x}, ${params.y}), button: ${params.button}`);
+    console.log(`Dispatching mouse event: ${type} at (${roundedX}, ${roundedY}), button: ${mouseButton}`);
 
-    await instance.cdpSession.send('Input.dispatchMouseEvent', params);
+    try {
+      if (type === 'mouseMoved') {
+        await instance.page.mouse.move(roundedX, roundedY);
+      } else if (type === 'mousePressed') {
+        await instance.page.mouse.move(roundedX, roundedY);
+        await instance.page.mouse.down({ button: mouseButton as any });
+      } else if (type === 'mouseReleased') {
+        await instance.page.mouse.up({ button: mouseButton as any });
+      }
 
-    await this.saveCookies(sessionId, instance.page);
+      await this.saveCookies(sessionId, instance.page);
+    } catch (error) {
+      console.error(`Error dispatching mouse event: ${error}`);
+      throw error;
+    }
   }
 
   /**
@@ -596,28 +603,25 @@ export class BrowserSessionManager {
    */
   async dispatchKeyEvent(sessionId: string, type: string, key: string, text?: string): Promise<void> {
     const instance = activeBrowsers.get(sessionId);
-    if (!instance?.cdpSession) {
-      throw new Error("Session not streaming");
-    }
-
-    const params: any = {
-      type,
-    };
-
-    if (type === 'keyDown' || type === 'rawKeyDown') {
-      params.key = key;
-      if (text) {
-        params.text = text;
-      }
-    } else if (type === 'keyUp') {
-      params.key = key;
-    } else if (type === 'char') {
-      params.text = text || key;
+    if (!instance?.page) {
+      throw new Error("Session not running");
     }
 
     console.log(`Dispatching key event: ${type}, key: ${key}, text: ${text || 'none'}`);
 
-    await instance.cdpSession.send('Input.dispatchKeyEvent', params);
+    try {
+      if (type === 'keyDown') {
+        await instance.page.keyboard.down(key as any);
+        if (text) {
+          await instance.page.keyboard.sendCharacter(text);
+        }
+      } else if (type === 'keyUp') {
+        await instance.page.keyboard.up(key as any);
+      }
+    } catch (error) {
+      console.error(`Error dispatching key event: ${error}`);
+      throw error;
+    }
   }
 
   /**
