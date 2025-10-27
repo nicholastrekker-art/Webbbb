@@ -197,14 +197,22 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
       return;
     }
 
-    const rect = canvasRef.current.getBoundingClientRect();
-    const scaleX = (session.viewportWidth || 1920) / rect.width;
-    const scaleY = (session.viewportHeight || 1080) / rect.height;
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    
+    // Get the actual canvas dimensions
+    const canvasWidth = canvas.width;
+    const canvasHeight = canvas.height;
+    
+    // Calculate click position relative to canvas
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    
+    // Scale to actual browser viewport coordinates
+    const x = (clickX / rect.width) * canvasWidth;
+    const y = (clickY / rect.height) * canvasHeight;
 
-    const x = (e.clientX - rect.left) * scaleX;
-    const y = (e.clientY - rect.top) * scaleY;
-
-    console.log(`Click coordinates: raw=(${e.clientX - rect.left}, ${e.clientY - rect.top}), scaled=(${x}, ${y})`);
+    console.log(`Click: canvas=${rect.width}x${rect.height}, viewport=${canvasWidth}x${canvasHeight}, click=(${clickX}, ${clickY}), scaled=(${x}, ${y})`);
     sendMouseEvent('mousePressed', x, y);
     setTimeout(() => sendMouseEvent('mouseReleased', x, y), 100);
     dialogContentRef.current?.focus();
@@ -213,12 +221,14 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
   const handleCanvasMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!canvasRef.current || !isConnected) return;
 
-    const rect = canvasRef.current.getBoundingClientRect();
-    const scaleX = (session.viewportWidth || 1920) / rect.width;
-    const scaleY = (session.viewportHeight || 1080) / rect.height;
-
-    const x = (e.clientX - rect.left) * scaleX;
-    const y = (e.clientY - rect.top) * scaleY;
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    
+    const x = (clickX / rect.width) * canvas.width;
+    const y = (clickY / rect.height) * canvas.height;
 
     sendMouseEvent('mouseMoved', x, y);
   };
@@ -232,13 +242,15 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
     e.preventDefault();
     if (!canvasRef.current || !isConnected) return;
 
+    const canvas = canvasRef.current;
     const touch = e.touches[0];
-    const rect = canvasRef.current.getBoundingClientRect();
-    const scaleX = (session.viewportWidth || 1920) / rect.width;
-    const scaleY = (session.viewportHeight || 1080) / rect.height;
-
-    const x = (touch.clientX - rect.left) * scaleX;
-    const y = (touch.clientY - rect.top) * scaleY;
+    const rect = canvas.getBoundingClientRect();
+    
+    const touchX = touch.clientX - rect.left;
+    const touchY = touch.clientY - rect.top;
+    
+    const x = (touchX / rect.width) * canvas.width;
+    const y = (touchY / rect.height) * canvas.height;
 
     console.log(`Touch start at: (${x}, ${y})`);
     sendMouseEvent('mousePressed', x, y);
@@ -248,13 +260,15 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
     e.preventDefault();
     if (!canvasRef.current || !isConnected) return;
 
+    const canvas = canvasRef.current;
     const touch = e.changedTouches[0];
-    const rect = canvasRef.current.getBoundingClientRect();
-    const scaleX = (session.viewportWidth || 1920) / rect.width;
-    const scaleY = (session.viewportHeight || 1080) / rect.height;
-
-    const x = (touch.clientX - rect.left) * scaleX;
-    const y = (touch.clientY - rect.top) * scaleY;
+    const rect = canvas.getBoundingClientRect();
+    
+    const touchX = touch.clientX - rect.left;
+    const touchY = touch.clientY - rect.top;
+    
+    const x = (touchX / rect.width) * canvas.width;
+    const y = (touchY / rect.height) * canvas.height;
 
     console.log(`Touch end at: (${x}, ${y})`);
     sendMouseEvent('mouseReleased', x, y);
@@ -264,13 +278,15 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
     e.preventDefault();
     if (!canvasRef.current || !isConnected) return;
 
+    const canvas = canvasRef.current;
     const touch = e.touches[0];
-    const rect = canvasRef.current.getBoundingClientRect();
-    const scaleX = (session.viewportWidth || 1920) / rect.width;
-    const scaleY = (session.viewportHeight || 1080) / rect.height;
-
-    const x = (touch.clientX - rect.left) * scaleX;
-    const y = (touch.clientY - rect.top) * scaleY;
+    const rect = canvas.getBoundingClientRect();
+    
+    const touchX = touch.clientX - rect.left;
+    const touchY = touch.clientY - rect.top;
+    
+    const x = (touchX / rect.width) * canvas.width;
+    const y = (touchY / rect.height) * canvas.height;
 
     sendMouseEvent('mouseMoved', x, y);
   };
