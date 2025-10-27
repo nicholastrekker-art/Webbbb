@@ -597,6 +597,22 @@ export class BrowserSessionManager {
           await instance.page.mouse.move(roundedX, roundedY);
           await instance.page.mouse.down({ button: mouseButton as any });
           instance.mouseButtonPressed = true;
+          
+          // Inject a click event at the DOM level to ensure interaction
+          await instance.page.evaluate((px, py) => {
+            const element = document.elementFromPoint(px, py);
+            if (element) {
+              console.log('Clicking element at', px, py, ':', element.tagName, element.className);
+              element.dispatchEvent(new MouseEvent('mousedown', {
+                bubbles: true,
+                cancelable: true,
+                view: window,
+                clientX: px,
+                clientY: py,
+                button: 0
+              }));
+            }
+          }, roundedX, roundedY);
         } else {
           console.log('Mouse button already pressed, skipping mousePressed event');
         }
@@ -605,6 +621,29 @@ export class BrowserSessionManager {
         if (instance.mouseButtonPressed) {
           await instance.page.mouse.up({ button: mouseButton as any });
           instance.mouseButtonPressed = false;
+          
+          // Inject mouseup and click events at the DOM level
+          await instance.page.evaluate((px, py) => {
+            const element = document.elementFromPoint(px, py);
+            if (element) {
+              element.dispatchEvent(new MouseEvent('mouseup', {
+                bubbles: true,
+                cancelable: true,
+                view: window,
+                clientX: px,
+                clientY: py,
+                button: 0
+              }));
+              element.dispatchEvent(new MouseEvent('click', {
+                bubbles: true,
+                cancelable: true,
+                view: window,
+                clientX: px,
+                clientY: py,
+                button: 0
+              }));
+            }
+          }, roundedX, roundedY);
         } else {
           console.log('Mouse button not pressed, skipping mouseReleased event');
         }
