@@ -213,8 +213,20 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
     const y = (clickY / rect.height) * canvasHeight;
 
     console.log(`Click: canvas=${rect.width}x${rect.height}, viewport=${canvasWidth}x${canvasHeight}, click=(${clickX}, ${clickY}), scaled=(${x}, ${y})`);
+    
+    // Send triple click for better input field activation
     sendMouseEvent('mousePressed', x, y);
-    setTimeout(() => sendMouseEvent('mouseReleased', x, y), 100);
+    setTimeout(() => {
+      sendMouseEvent('mouseReleased', x, y);
+      // Second click to ensure focus
+      setTimeout(() => {
+        sendMouseEvent('mousePressed', x, y);
+        setTimeout(() => {
+          sendMouseEvent('mouseReleased', x, y);
+        }, 50);
+      }, 50);
+    }, 50);
+    
     dialogContentRef.current?.focus();
   };
 
@@ -272,6 +284,14 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
 
     console.log(`Touch end at: (${x}, ${y})`);
     sendMouseEvent('mouseReleased', x, y);
+    
+    // Send an additional click to ensure input fields get focus (important for mobile keyboards)
+    setTimeout(() => {
+      sendMouseEvent('mousePressed', x, y);
+      setTimeout(() => {
+        sendMouseEvent('mouseReleased', x, y);
+      }, 50);
+    }, 100);
   };
 
   const handleTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {

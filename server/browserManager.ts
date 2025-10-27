@@ -11,9 +11,9 @@ import type { WebSocket } from "ws";
 puppeteer.use(StealthPlugin());
 
 // Store active browser instances and pages
-const activeBrowsers = new Map<string, { 
-  browser: Browser; 
-  page: Page; 
+const activeBrowsers = new Map<string, {
+  browser: Browser;
+  page: Page;
   cdpSession?: CDPSession;
   streamClients: Set<WebSocket>;
   mouseButtonPressed: boolean;
@@ -204,7 +204,7 @@ export class BrowserSessionManager {
     }
 
     await instance.page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
-    
+
     // Update session URL and save cookies
     await storage.updateBrowserSession(sessionId, {
       url,
@@ -316,7 +316,7 @@ export class BrowserSessionManager {
 
     try {
       // Wait for file input to be available on the page
-      await instance.page.waitForSelector('input[type="file"]', { 
+      await instance.page.waitForSelector('input[type="file"]', {
         timeout: 5000,
         visible: false // Don't require it to be visible since some inputs are hidden
       });
@@ -326,7 +326,7 @@ export class BrowserSessionManager {
 
     // Find all file input elements on the page
     const fileInputs = await instance.page.$$('input[type="file"]');
-    
+
     if (fileInputs.length === 0) {
       throw new Error("No file input found on page");
     }
@@ -335,12 +335,12 @@ export class BrowserSessionManager {
 
     // Find the first visible and enabled file input, or just use the first one
     let targetInput = fileInputs[0]; // Default to first input
-    
+
     for (const input of fileInputs) {
       try {
         const isVisible = await input.isVisible();
         const isEnabled = await input.evaluate((el: HTMLInputElement) => !el.disabled);
-        
+
         if (isVisible && isEnabled) {
           targetInput = input;
           console.log('Found visible and enabled file input');
@@ -381,7 +381,7 @@ export class BrowserSessionManager {
 
     // Small delay to let the page process the file
     await new Promise(resolve => setTimeout(resolve, 1000));
-    
+
     console.log('File upload completed successfully');
   }
 
@@ -500,8 +500,8 @@ export class BrowserSessionManager {
 
         cdpSession.on('Page.screencastFrame', async (params: any) => {
           try {
-            await cdpSession.send('Page.screencastFrameAck', { 
-              sessionId: params.sessionId 
+            await cdpSession.send('Page.screencastFrameAck', {
+              sessionId: params.sessionId
             });
 
             const frameData = {
@@ -526,7 +526,7 @@ export class BrowserSessionManager {
 
         const viewport = instance.page.viewport();
         console.log(`Starting screencast with viewport ${viewport?.width}x${viewport?.height}`);
-        
+
         await cdpSession.send('Page.startScreencast', {
           format: 'jpeg',
           quality: 80,
@@ -605,6 +605,28 @@ export class BrowserSessionManager {
         if (instance.mouseButtonPressed) {
           await instance.page.mouse.up({ button: mouseButton as any });
           instance.mouseButtonPressed = false;
+
+          // Check if we clicked on an input field and try to focus it
+          try {
+            const elementHandle = await instance.page.evaluateHandle((x, y) => {
+              return document.elementFromPoint(x, y);
+            }, roundedX, roundedY);
+
+            const tagName = await instance.page.evaluate((el: any) => el?.tagName?.toLowerCase(), elementHandle);
+            const isInput = tagName === 'input' || tagName === 'textarea';
+
+            if (isInput) {
+              console.log(`Detected input field at (${roundedX}, ${roundedY}), attempting to focus`);
+              await instance.page.evaluate((el: any) => {
+                if (el && typeof el.focus === 'function') {
+                  el.focus();
+                  el.click();
+                }
+              }, elementHandle);
+            }
+          } catch (error) {
+            console.log('Error checking element type:', error);
+          }
         } else {
           console.log('Mouse button not pressed, skipping mouseReleased event');
         }
