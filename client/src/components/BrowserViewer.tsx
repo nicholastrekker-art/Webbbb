@@ -583,10 +583,9 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
                   const input = e.currentTarget;
                   const text = input.value;
                   if (text) {
-                    // Send each character
+                    // Send each character (only keyDown with text, no keyUp needed)
                     for (const char of text) {
                       sendKeyEvent('keyDown', char, char);
-                      sendKeyEvent('keyUp', char);
                     }
                     input.value = '';
                   }
@@ -604,9 +603,9 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
                 const input = e.currentTarget.previousElementSibling as HTMLInputElement;
                 const text = input?.value;
                 if (text) {
+                  // Send each character (only keyDown with text, no keyUp needed)
                   for (const char of text) {
                     sendKeyEvent('keyDown', char, char);
-                    sendKeyEvent('keyUp', char);
                   }
                   input.value = '';
                 }
