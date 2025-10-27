@@ -186,8 +186,10 @@ app.use((req, res, next) => {
       ws.on('message', async (message) => {
         try {
           const data = JSON.parse(message.toString());
+          log(`WS message: type=${data.type}, eventType=${data.eventType}`);
 
           if (data.type === 'mouseEvent') {
+            log(`Mouse: ${data.eventType} at (${Math.round(data.x)}, ${Math.round(data.y)})`);
             await browserManager.dispatchMouseEvent(
               browserSessionId!,
               data.eventType,
@@ -196,6 +198,7 @@ app.use((req, res, next) => {
               data.button
             );
           } else if (data.type === 'keyEvent') {
+            log(`Key: ${data.eventType}, key=${data.key}`);
             await browserManager.dispatchKeyEvent(
               browserSessionId!,
               data.eventType,
@@ -203,6 +206,7 @@ app.use((req, res, next) => {
               data.text
             );
           } else if (data.type === 'scroll') {
+            log(`Scroll: dx=${data.deltaX}, dy=${data.deltaY}`);
             await browserManager.dispatchScrollEvent(
               browserSessionId!,
               data.deltaX,
@@ -210,7 +214,7 @@ app.use((req, res, next) => {
             );
           }
         } catch (error) {
-          console.error('Error handling WebSocket message:', error);
+          log(`WebSocket message error: ${error}`);
         }
       });
 

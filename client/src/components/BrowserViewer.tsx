@@ -153,14 +153,19 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
   };
 
   const sendMouseEvent = (eventType: string, x: number, y: number, button: string = 'left') => {
+    console.log(`Frontend sending mouse event: ${eventType} at (${x}, ${y}), WS state: ${wsRef.current?.readyState}`);
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({
+      const payload = {
         type: 'mouseEvent',
         eventType,
         x,
         y,
         button,
-      }));
+      };
+      console.log('Sending payload:', payload);
+      wsRef.current.send(JSON.stringify(payload));
+    } else {
+      console.error('WebSocket not open, cannot send mouse event');
     }
   };
 
@@ -186,7 +191,11 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
   };
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!canvasRef.current || !isConnected) return;
+    console.log('Canvas clicked!', { isConnected, hasCanvas: !!canvasRef.current });
+    if (!canvasRef.current || !isConnected) {
+      console.warn('Cannot process click - canvas or connection not ready');
+      return;
+    }
 
     const rect = canvasRef.current.getBoundingClientRect();
     const scaleX = (session.viewportWidth || 1920) / rect.width;
@@ -194,6 +203,8 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
 
     const x = (e.clientX - rect.left) * scaleX;
     const y = (e.clientY - rect.top) * scaleY;
+
+    console.log(`Click coordinates: raw=(${e.clientX - rect.left}, ${e.clientY - rect.top}), scaled=(${x}, ${y})`);
 
     sendMouseEvent('mousePressed', x, y);
     setTimeout(() => sendMouseEvent('mouseReleased', x, y), 10);
