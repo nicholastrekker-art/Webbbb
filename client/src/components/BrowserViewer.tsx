@@ -572,6 +572,53 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
             )}
           </div>
 
+          <div className="flex items-center gap-2">
+            <Input
+              type="text"
+              placeholder="Type text here to send to the browser..."
+              className="flex-1 text-sm"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  const input = e.currentTarget;
+                  const text = input.value;
+                  if (text) {
+                    // Send each character
+                    for (const char of text) {
+                      sendKeyEvent('keyDown', char, char);
+                      sendKeyEvent('keyUp', char);
+                    }
+                    input.value = '';
+                  }
+                } else if (e.key === 'Backspace') {
+                  e.stopPropagation();
+                } else {
+                  e.stopPropagation();
+                }
+              }}
+              disabled={!isConnected}
+              data-testid="input-text-sender"
+            />
+            <Button
+              onClick={(e) => {
+                const input = e.currentTarget.previousElementSibling as HTMLInputElement;
+                const text = input?.value;
+                if (text) {
+                  for (const char of text) {
+                    sendKeyEvent('keyDown', char, char);
+                    sendKeyEvent('keyUp', char);
+                  }
+                  input.value = '';
+                }
+              }}
+              disabled={!isConnected}
+              size="sm"
+              className="shrink-0"
+            >
+              Send
+            </Button>
+          </div>
+
           <div className="text-xs text-muted-foreground hidden sm:block">
             <strong>Tip:</strong> Click on the canvas to interact with the browser.
             Type anywhere to send keyboard input. Use the mouse wheel to scroll.
