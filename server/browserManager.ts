@@ -663,9 +663,12 @@ export class BrowserSessionManager {
       }
 
       if (type === 'keyDown') {
-        await instance.page.keyboard.down(key as any);
-        if (text) {
+        if (text && text.length === 1) {
+          // For single characters, just use sendCharacter to avoid duplication
           await instance.page.keyboard.sendCharacter(text);
+        } else {
+          // For special keys, use down
+          await instance.page.keyboard.down(key as any);
         }
       } else if (type === 'keyUp') {
         await instance.page.keyboard.up(key as any);

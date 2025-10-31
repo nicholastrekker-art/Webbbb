@@ -180,6 +180,20 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
     }
   };
 
+  const sendTextCharacters = (textToSend: string) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      // Send the entire text at once instead of character by character
+      for (const char of textToSend) {
+        wsRef.current.send(JSON.stringify({
+          type: 'keyEvent',
+          eventType: 'keyDown',
+          key: char,
+          text: char,
+        }));
+      }
+    }
+  };
+
   const sendScrollEvent = (deltaX: number, deltaY: number) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({
@@ -583,10 +597,7 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
                   const input = e.currentTarget;
                   const text = input.value;
                   if (text) {
-                    // Send each character (only keyDown with text, no keyUp needed)
-                    for (const char of text) {
-                      sendKeyEvent('keyDown', char, char);
-                    }
+                    sendTextCharacters(text);
                     input.value = '';
                   }
                 } else if (e.key === 'Backspace') {
@@ -603,10 +614,7 @@ export function BrowserViewer({ open, onOpenChange, session }: BrowserViewerProp
                 const input = e.currentTarget.previousElementSibling as HTMLInputElement;
                 const text = input?.value;
                 if (text) {
-                  // Send each character (only keyDown with text, no keyUp needed)
-                  for (const char of text) {
-                    sendKeyEvent('keyDown', char, char);
-                  }
+                  sendTextCharacters(text);
                   input.value = '';
                 }
               }}
